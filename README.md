@@ -463,6 +463,14 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
   </picture>
 </a>
 
+## Security
+
+| Date | Status | Issues Fixed | Report |
+|------|--------|-------------|--------|
+| 2026-04-16 | ✅ Clean | 1 (`rustls-webpki` 0.103.9 → 0.103.12) | [View report](Security%20reports/2026-04-16-security-report.md) |
+
+Last audit: **2026-04-16** — Audited with Gitleaks, Semgrep, Trivy, TruffleHog, OSV-Scanner. No outstanding vulnerabilities.
+
 ## Contributing
 
 Contributions welcome! Please open an issue or PR on [GitHub](https://github.com/rtk-ai/rtk).
