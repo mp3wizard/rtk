@@ -35,6 +35,14 @@
 
 rtk filters and compresses command outputs before they reach your LLM context. Single Rust binary, 100+ supported commands, <10ms overhead.
 
+## Security Audit
+| | |
+|-|-|
+| Last audit | 2026-04-18 |
+| Status | PASSED |
+| Summary | 0 vulnerabilities in 203 dependencies; all Gitleaks flags confirmed false positives by TruffleHog live verification |
+| Report | [Security reports/security-audit-2026-04-18.md](Security%20reports/security-audit-2026-04-18.md) |
+
 ## Token Savings (30-min Claude Code Session)
 
 | Operation | Frequency | Standard | rtk | Savings |
