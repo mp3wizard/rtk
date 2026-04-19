@@ -35,14 +35,6 @@
 
 rtk filters and compresses command outputs before they reach your LLM context. Single Rust binary, 100+ supported commands, <10ms overhead.
 
-## Security Audit
-| | |
-|-|-|
-| Last audit | 2026-04-18 |
-| Status | PASSED |
-| Summary | 0 vulnerabilities in 203 dependencies; all Gitleaks flags confirmed false positives by TruffleHog live verification |
-| Report | [Security reports/security-audit-2026-04-18.md](Security%20reports/security-audit-2026-04-18.md) |
-
 ## Token Savings (30-min Claude Code Session)
 
 | Operation | Frequency | Standard | rtk | Savings |
@@ -472,13 +464,14 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
   </picture>
 </a>
 
-## Security
+## Core team
 
-| Date | Status | Issues Fixed | Report |
-|------|--------|-------------|--------|
-| 2026-04-16 | ✅ Clean | 1 (`rustls-webpki` 0.103.9 → 0.103.12) | [View report](Security%20reports/2026-04-16-security-report.md) |
-
-Last audit: **2026-04-16** — Audited with Gitleaks, Semgrep, Trivy, TruffleHog, OSV-Scanner. No outstanding vulnerabilities.
+- **Patrick Szymkowiak** — Founder
+  [GitHub](https://github.com/pszymkowiak) · [LinkedIn](https://www.linkedin.com/in/patrick-szymkowiak/)
+- **Florian Bruniaux** — Core contributor
+  [GitHub](https://github.com/FlorianBruniaux) · [LinkedIn](https://www.linkedin.com/in/florian-bruniaux-43408b83/)
+- **Adrien Eppling** — Core contributor
+  [GitHub](https://github.com/aeppling) · [LinkedIn](https://www.linkedin.com/in/adrien-eppling/)
 
 ## Contributing
 
