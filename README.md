@@ -476,10 +476,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-04-19 |
-| Status | PASSED |
-| Summary | 0 real issues found; 11 gitleaks findings confirmed false positives (doc examples/test fixtures); TruffleHog verified 0 live secrets; Cargo deps clean |
-| Report | [Security reports/security-audit-2026-04-19.md](Security%20reports/security-audit-2026-04-19.md) |
+| Last audit | 2026-04-30 |
+| Status | ISSUES FIXED |
+| Summary | rustls-webpki 0.103.12 → 0.103.13 (RUSTSEC-2026-0104) auto-bumped; 12 gitleaks findings confirmed false positives (doc examples/test fixtures); 1 upstream Bandit medium logged for upstream PR |
+| Report | [Security reports/security-audit-2026-04-30.md](Security%20reports/security-audit-2026-04-30.md) |
 
 ## Contributing
 
