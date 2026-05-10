@@ -476,10 +476,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-04-30 |
-| Status | ISSUES FIXED |
-| Summary | rustls-webpki 0.103.12 → 0.103.13 (RUSTSEC-2026-0104) auto-bumped; 12 gitleaks findings confirmed false positives (doc examples/test fixtures); 1 upstream Bandit medium logged for upstream PR |
-| Report | [Security reports/security-audit-2026-04-30.md](Security%20reports/security-audit-2026-04-30.md) |
+| Last audit | 2026-05-10 |
+| Status | PASSED |
+| Summary | No in-scope vulnerabilities; main Cargo.lock clean (rustls-webpki already at 0.103.13). 28 upstream commits merged. |
+| Report | [Security reports/security-audit-2026-05-10.md](Security%20reports/security-audit-2026-05-10.md) |
 
 ## Contributing
 
