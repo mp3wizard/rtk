@@ -476,10 +476,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-05-10 |
+| Last audit | 2026-05-11 |
 | Status | PASSED |
-| Summary | No in-scope vulnerabilities; main Cargo.lock clean (rustls-webpki already at 0.103.13). 28 upstream commits merged. |
-| Report | [Security reports/security-audit-2026-05-10.md](Security%20reports/security-audit-2026-05-10.md) |
+| Summary | No new in-scope vulnerabilities. 11 upstream commits merged; main Cargo.lock clean (rustls-webpki 0.103.13). |
+| Report | [Security reports/security-audit-2026-05-11.md](Security%20reports/security-audit-2026-05-11.md) |
 
 ## Contributing
 
