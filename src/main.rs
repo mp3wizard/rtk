@@ -1130,7 +1130,7 @@ enum GoCommands {
     Other(Vec<OsString>),
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 enum SbtCommands {
     /// Run tests with compact output (90% token reduction via ScalaTest filtering)
     Test {
