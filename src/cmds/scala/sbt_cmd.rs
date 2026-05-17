@@ -12,6 +12,13 @@ lazy_static! {
         r"Tests: succeeded (\d+), failed (\d+), canceled (\d+), ignored (\d+), pending (\d+)"
     ).unwrap();
 
+    /// Matches the munit summary line (also used by discipline-munit / ZIO Test):
+    /// [info] Passed: Total N, Failed N, Errors N, Passed N
+    /// [info] Failed: Total N, Failed N, Errors N, Passed N
+    static ref MUNIT_SUMMARY_RE: Regex = Regex::new(
+        r"^\[info\] (?:Passed|Failed): Total \d+, Failed (\d+), Errors (\d+), Passed (\d+)"
+    ).unwrap();
+
     /// Matches suite count line:
     /// Suites: completed N, aborted N
     static ref SUITE_SUMMARY_RE: Regex = Regex::new(
@@ -312,6 +319,15 @@ fn filter_sbt_test(output: &str) -> String {
             in_failure_detail = false;
             continue;
         }
+        if let Some(caps) = MUNIT_SUMMARY_RE.captures(trimmed) {
+            let munit_failed: u32 = caps[1].parse().unwrap_or(0);
+            let errors: u32 = caps[2].parse().unwrap_or(0);
+            succeeded = caps[3].parse().unwrap_or(0);
+            failed = munit_failed + errors;
+            has_summary = true;
+            in_failure_detail = false;
+            continue;
+        }
         if let Some(caps) = SUITE_SUMMARY_RE.captures(trimmed) {
             suites = caps[1].parse().unwrap_or(0);
             in_failure_detail = false;
@@ -406,7 +422,7 @@ fn filter_sbt_test(output: &str) -> String {
 
     if !has_summary {
         if !error_lines.is_empty() {
-            let mut result = String::from("sbt test: parse error\n");
+            let mut result = String::from("sbt test: errors\n");
             result.push_str("═══════════════════════════════════════\n");
             for line in error_lines.iter().take(20) {
                 result.push_str(&format!("  {}\n", truncate(line, 120)));
@@ -783,6 +799,43 @@ mod tests {
         assert!(!is_integration_test_cmd("test"));
         assert!(!is_integration_test_cmd("compile"));
         assert!(!is_integration_test_cmd("assembly"));
+    }
+
+    // --- sbt test: munit format ---
+
+    #[test]
+    fn test_filter_sbt_test_munit_pass() {
+        let input = include_str!("../../../tests/fixtures/sbt/sbt_test_munit_pass.txt");
+        let output = filter_sbt_test(input);
+
+        assert!(output.starts_with("sbt test:"), "output: {}", output);
+        assert!(output.contains("12 passed"), "output: {}", output);
+        assert!(!output.contains('\n'), "all-pass output should be a single line");
+        assert!(!output.contains("parse error"), "output: {}", output);
+    }
+
+    #[test]
+    fn test_filter_sbt_test_munit_fail() {
+        let input = include_str!("../../../tests/fixtures/sbt/sbt_test_munit_fail.txt");
+        let output = filter_sbt_test(input);
+
+        assert!(output.contains("8 passed"), "output: {}", output);
+        assert!(output.contains("2 failed"), "output: {}", output);
+        assert!(output.contains("[FAIL]"), "output: {}", output);
+        assert!(!output.contains("parse error"), "output: {}", output);
+    }
+
+    #[test]
+    fn test_filter_sbt_test_munit_token_savings() {
+        let input = include_str!("../../../tests/fixtures/sbt/sbt_test_munit_pass.txt");
+        let output = filter_sbt_test(input);
+        let savings = 100.0
+            - (count_tokens(&output) as f64 / count_tokens(input) as f64 * 100.0);
+        assert!(
+            savings >= 60.0,
+            "sbt test (munit): expected >=60% savings, got {:.1}%",
+            savings
+        );
     }
 
     // --- sbt compile ---
