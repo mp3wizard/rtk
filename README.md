@@ -478,10 +478,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-05-15 |
+| Last audit | 2026-05-18 |
 | Status | PASSED |
-| Summary | No actionable vulnerabilities. 4 upstream commits merged; root Cargo.lock clean, 0 verified secrets. |
-| Report | [Security reports/security-audit-2026-05-15.md](Security%20reports/security-audit-2026-05-15.md) |
+| Summary | No actionable vulnerabilities. 4 upstream commits merged; root Cargo.lock clean (203 packages), gitleaks hits are test fixtures/doc examples only. |
+| Report | [Security reports/security-audit-2026-05-18.md](Security%20reports/security-audit-2026-05-18.md) |
 
 ## Contributing
 
