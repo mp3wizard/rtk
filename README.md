@@ -478,10 +478,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-05-18 |
-| Status | PASSED |
-| Summary | No actionable vulnerabilities. 4 upstream commits merged; root Cargo.lock clean (203 packages), gitleaks hits are test fixtures/doc examples only. |
-| Report | [Security reports/security-audit-2026-05-18.md](Security%20reports/security-audit-2026-05-18.md) |
+| Last audit | 2026-05-20 |
+| Status | ISSUES FIXED |
+| Summary | 12 upstream commits merged. 1 HIGH advisory (rustls-webpki GHSA-82j2-j2ch-gfr8) already resolved at 0.103.13 in the merged Cargo.lock; OSV clean (203 packages), 0 verified secrets, gitleaks hits are test fixtures only. |
+| Report | [Security reports/security-audit-2026-05-20.md](Security%20reports/security-audit-2026-05-20.md) |
 
 ## Contributing
 
