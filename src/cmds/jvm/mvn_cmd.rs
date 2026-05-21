@@ -46,12 +46,6 @@ lazy_static! {
     /// Module banner with project name in brackets.
     static ref MODULE_BANNER: Regex = Regex::new(r"^\[INFO\] -+< .+ >-+$").unwrap();
 
-    /// Duration normaliser for deterministic snapshots.
-    static ref TIME_DURATION: Regex = Regex::new(r"Time elapsed: [0-9.]+ s").unwrap();
-
-    /// Total time line — also normalised.
-    static ref TOTAL_TIME: Regex = Regex::new(r"^\[INFO\] Total time:\s+[0-9.]+ s").unwrap();
-
     /// Compile-error coordinate substring to strip when deduping warnings/errors.
     static ref FILE_COORD: Regex = Regex::new(r"/[^:]+\.java:\[\d+,\d+\]").unwrap();
 }
@@ -117,15 +111,6 @@ fn has_english_footer(stripped: &str) -> bool {
     })
 }
 
-// ── Duration normaliser ─────────────────────────────────────────────────────
-
-fn normalise(s: &str) -> String {
-    let s = TIME_DURATION.replace_all(s, "Time elapsed: T s").into_owned();
-    TOTAL_TIME
-        .replace_all(&s, "[INFO] Total time: T s")
-        .into_owned()
-}
-
 // ── Outside-block keep list (shared by surefire + package) ──────────────────
 
 fn keep_outside_block(line: &str) -> bool {
@@ -153,10 +138,11 @@ fn keep_outside_block(line: &str) -> bool {
 /// State machine: when a `[INFO] Running <FQN>` line is seen, start buffering
 /// the block. When the close line arrives, decide:
 /// - Failures == 0 && Errors == 0 → drop the block silently.
-/// - Else → emit the block with framework frames stripped, durations normalised,
-///   then enter a failure-trail mode that preserves the exception line and
-///   user-code frames Surefire 3.x emits *after* the close line (until the
-///   next blank line ends the trail).
+/// - Else → emit the block with framework frames stripped, then enter a
+///   failure-trail mode that preserves the exception line and user-code
+///   frames Surefire 3.x emits *after* the close line (until the next
+///   blank line ends the trail). Raw durations are preserved — the
+///   user/LLM needs them.
 ///
 /// English-footer guard: if no `BUILD SUCCESS`/`BUILD FAILURE` line is present,
 /// return the ANSI-stripped raw input (non-English locale or truncated output).
@@ -194,7 +180,7 @@ pub fn filter_surefire(raw: &str) -> String {
                 let err = caps.get(2).map(|m| m.as_str() != "0").unwrap_or(false);
                 if fail || err {
                     emit_block(&mut out, &block_running, &block_lines);
-                    out.push_str(&normalise(line));
+                    out.push_str(line);
                     out.push('\n');
                     failure_trail = true;
                 }
@@ -223,7 +209,7 @@ pub fn filter_surefire(raw: &str) -> String {
         }
 
         if keep_outside_block(line) {
-            out.push_str(&normalise(line));
+            out.push_str(line);
             out.push('\n');
         }
     }
@@ -236,18 +222,18 @@ pub fn filter_surefire(raw: &str) -> String {
 
 fn flush_block_as_keep(out: &mut String, running: &Option<String>, lines: &[String]) {
     if let Some(r) = running {
-        out.push_str(&normalise(r));
+        out.push_str(r);
         out.push('\n');
     }
     for l in lines {
-        out.push_str(&normalise(l));
+        out.push_str(l);
         out.push('\n');
     }
 }
 
 fn emit_block(out: &mut String, running: &Option<String>, lines: &[String]) {
     if let Some(r) = running {
-        out.push_str(&normalise(r));
+        out.push_str(r);
         out.push('\n');
     }
     for l in lines {
@@ -255,7 +241,7 @@ fn emit_block(out: &mut String, running: &Option<String>, lines: &[String]) {
         if t.starts_with("at ") && is_framework_frame(t) {
             continue;
         }
-        out.push_str(&normalise(l));
+        out.push_str(l);
         out.push('\n');
     }
 }
@@ -291,7 +277,7 @@ pub fn filter_compile(raw: &str) -> String {
             || line.starts_with("[INFO] Finished at:")
             || line.starts_with("[INFO] Scanning ")
         {
-            out.push_str(&normalise(line));
+            out.push_str(line);
             out.push('\n');
             keep_continuation = false;
             continue;
@@ -370,7 +356,7 @@ pub fn filter_package(raw: &str) -> String {
                 let err = caps.get(2).map(|m| m.as_str() != "0").unwrap_or(false);
                 if fail || err {
                     emit_block(&mut out, &block_running, &block_lines);
-                    out.push_str(&normalise(line));
+                    out.push_str(line);
                     out.push('\n');
                     failure_trail = true;
                 }
@@ -400,7 +386,7 @@ pub fn filter_package(raw: &str) -> String {
 
         // Outside any Surefire block: compile-keep AND surefire-outside-keep merge.
         if MODULE_BANNER.is_match(line) || keep_outside_block(line) {
-            out.push_str(&normalise(line));
+            out.push_str(line);
             out.push('\n');
             keep_continuation = line.starts_with("[ERROR]")
                 && !line.starts_with("[ERROR] Tests run:")
@@ -756,16 +742,30 @@ mod tests {
         assert!(o.contains("-----< com.example:myapp >-----"));
     }
 
+    /// Production must ship raw `Time elapsed` and `Total time` durations
+    /// untouched — the LLM/user needs the actual numbers to diagnose perf
+    /// regressions. Earlier revisions normalised these to `T s`; that was
+    /// only ever needed for deterministic snapshots and never belonged in
+    /// the production path.
     #[test]
-    fn surefire_normalises_durations() {
-        let i = "[INFO] -----< x >-----\n[INFO] Running x.Foo\n[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 2.341 s <<< FAILURE! - in x.Foo\n[INFO] BUILD FAILURE\n";
+    fn surefire_preserves_real_durations() {
+        let i = "[INFO] -----< x >-----\n[INFO] Running x.Foo\n[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 2.341 s <<< FAILURE! - in x.Foo\n[INFO] BUILD FAILURE\n[INFO] Total time:  4.567 s\n";
         let o = filter_surefire(i);
         assert!(
-            o.contains("Time elapsed: T s"),
-            "duration normalised; got:\n{}",
+            o.contains("2.341 s"),
+            "raw close-line duration preserved; got:\n{}",
             o
         );
-        assert!(!o.contains("2.341"), "raw duration removed; got:\n{}", o);
+        assert!(
+            o.contains("Total time:  4.567 s"),
+            "raw total time preserved; got:\n{}",
+            o
+        );
+        assert!(
+            !o.contains("Time elapsed: T s"),
+            "no normalisation in production; got:\n{}",
+            o
+        );
     }
 
     #[test]
