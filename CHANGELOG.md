@@ -5,6 +5,44 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.0](https://github.com/rtk-ai/rtk/compare/v0.39.0...v0.40.0) (2026-05-13)
+
+
+### Features
+
+* **gradlew:** Gradle support for Android/Kotlin developers ([833026b](https://github.com/rtk-ai/rtk/commit/833026b893822be4e1c64d22d640e979cd9eff51))
+* **hermes:** add Hermes Agent support via rtk init --agent hermes ([55f998d](https://github.com/rtk-ai/rtk/commit/55f998d08cd80ece970fe5e61eaae3533512288b))
+* **hermes:** add rtk integration ([9d3b99d](https://github.com/rtk-ai/rtk/commit/9d3b99dec8516fd32071d151306b5bb6fd4d06e3))
+* **hooks:** add transparent_prefixes config for wrapper commands ([998f1ee](https://github.com/rtk-ai/rtk/commit/998f1ee0a3cf8d73ea0d6d87c121117f351e4992))
+* **init:** add --dry-run flag to preview changes without writing ([172ec54](https://github.com/rtk-ai/rtk/commit/172ec54580ddb0d737ef3e3be8a075eaeeb0a01b))
+
+
+### Bug Fixes
+
+* **cicd:** pr-target clean msg + git app token ([e4c3ed7](https://github.com/rtk-ai/rtk/commit/e4c3ed7d889ede726df7986ade94a4714c7c7f99))
+* **cicd:** pr-target clean msg + git app token ([4ebda52](https://github.com/rtk-ai/rtk/commit/4ebda52f5ab898f9c0e8c610cc51b36a63e6eefa))
+* **cicd:** set release-please target-branch to master [skip ci] ([0c6a838](https://github.com/rtk-ai/rtk/commit/0c6a838594e87346b67bd13c092b8a46a783af87))
+* correct ARCHITECTURE.md path in README links ([2a41e03](https://github.com/rtk-ai/rtk/commit/2a41e039903049543aa6c69482747eddcce9ee5a))
+* correct ARCHITECTURE.md path in README links ([f2da381](https://github.com/rtk-ai/rtk/commit/f2da381ae2353d31dd7252af6c868c56f6aa3db8))
+* don't inject -json for go test -bench runs ([380a7c9](https://github.com/rtk-ai/rtk/commit/380a7c9f1189fafe7d0b878b3821a720ac6ab4b2))
+* don't inject -json for go test -bench runs ([b058c96](https://github.com/rtk-ai/rtk/commit/b058c960f48535227cdec93392a70ee84f3cd2ee)), closes [#1609](https://github.com/rtk-ai/rtk/issues/1609)
+* **dotnet:** 🐛 format build/test/restore output sections ([106305b](https://github.com/rtk-ai/rtk/commit/106305b1978ad5fdd47139d3543cfa53a5e8172e))
+* **dotnet:** 🐛 format build/test/restore output summaries ([271bc53](https://github.com/rtk-ai/rtk/commit/271bc53f35c23b39dc42002e8eb3032557f845ec))
+* **dotnet:** 🐛 format warnings section in build/test/restore outputs ([c5245d7](https://github.com/rtk-ai/rtk/commit/c5245d74fafc066072615d804c27d5c2892db7d9))
+* **dotnet:** move build/test/restore status line to the bottom ([ed161b0](https://github.com/rtk-ai/rtk/commit/ed161b0a33a2a784bb933792501aa2747b0df3c3)), closes [#1574](https://github.com/rtk-ai/rtk/issues/1574)
+* **gradlew:** use resolved_command for system gradle fallback ([9e3a5ae](https://github.com/rtk-ai/rtk/commit/9e3a5ae68d4adc3d7fc374f36235cb5164e6efc8))
+* **hooks:** address transparent prefix review ([fdf0ed0](https://github.com/rtk-ai/rtk/commit/fdf0ed0b597f1ebdc96a2793df2725a1e62bc65c))
+* **hooks:** address transparent prefix review comments ([041de2b](https://github.com/rtk-ai/rtk/commit/041de2b6baa6a27af7d9b429d807fbe887780c90))
+* **hooks:** compose env and transparent prefixes ([b234bc6](https://github.com/rtk-ai/rtk/commit/b234bc6db1ab301334412409a4cfd67fe99c58f0))
+* **hooks:** make Cursor preToolUse rewrites work and stay visible ([2d6e10a](https://github.com/rtk-ai/rtk/commit/2d6e10a923d18e022f5fdc4ed9b69ae0d43b2f79))
+* **hooks:** make Cursor preToolUse rewrites work and stay visible ([f00977a](https://github.com/rtk-ai/rtk/commit/f00977aa338ce6bafe8df69c271679951310b045))
+* minor code cleanup, avoid duplicating logic ([20cac8a](https://github.com/rtk-ai/rtk/commit/20cac8a4e7c2b7e0e2675dbcab4fbd0fb1ad79ed))
+* new rewite_command test call after rebase ([5cfb8e1](https://github.com/rtk-ai/rtk/commit/5cfb8e1d2bdf85d60633868cb420aba9a7b923f4))
+* resolve merge conflict artifacts in init.rs ([4830d50](https://github.com/rtk-ai/rtk/commit/4830d50f6e3ad7adbd24ba11f3e392869723a020))
+* **security:** pin workflow actions to SHA, clean up tempfile on failure ([26b96ec](https://github.com/rtk-ai/rtk/commit/26b96ec6c4f40f992ccffa190af9a4de8d7636b1))
+* **security:** replace insecure tmp, lock git perm, set sha for actions ([54d1f87](https://github.com/rtk-ai/rtk/commit/54d1f8736f4acdd0667eb86c81d0e4c7843306f4))
+* **security:** replace insecure tmp, lock git workflow perm ([cd6ac2f](https://github.com/rtk-ai/rtk/commit/cd6ac2f47a008c6dca04b567faf68aaedfd87ca9))
+
 ## [0.39.0](https://github.com/rtk-ai/rtk/compare/v0.38.0...v0.39.0) (2026-05-06)
 
 
