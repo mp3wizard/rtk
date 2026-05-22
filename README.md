@@ -478,10 +478,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-05-21 |
+| Last audit | 2026-05-22 |
 | Status | PASSED |
-| Summary | 8 upstream commits merged. No actionable issues: OSV clean (203 packages), root Cargo.lock pins fixed rustls-webpki 0.103.13, Semgrep 0 findings, 0 verified secrets, gitleaks hits are test fixtures/docs only. |
-| Report | [Security reports/security-audit-2026-05-21.md](Security%20reports/security-audit-2026-05-21.md) |
+| Summary | 9 upstream commits merged (release 0.40.0). No actionable issues: OSV clean (203 packages), root Cargo.lock already pins fixed rustls-webpki 0.103.13, 0 verified secrets; Trivy HIGH applies only to stale worktree lockfiles and gitleaks hits are test fixtures/docs. |
+| Report | [Security reports/security-audit-2026-05-22.md](Security%20reports/security-audit-2026-05-22.md) |
 
 ## Contributing
 
