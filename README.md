@@ -57,46 +57,48 @@ rtk filters and compresses command outputs before they reach your LLM context. S
 
 ## Installation
 
-### Homebrew (recommended)
+### From Source (recommended)
 
 ```bash
-brew install rtk
+git clone https://github.com/mp3wizard/rtk
+cd rtk
+cargo install --path .
 ```
 
-### Quick Install (Linux/macOS)
+> Requires [Rust](https://rustup.rs/) 1.70+. Installs to `~/.cargo/bin/rtk`.
+
+### Quick Install — wrapper at `~/.local/bin`
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+git clone https://github.com/mp3wizard/rtk
+cd rtk
+cargo install --path .
+cat > "$HOME/.local/bin/rtk" <<'EOF'
+#!/bin/sh
+exec "$HOME/.cargo/bin/rtk" "$@"
+EOF
+chmod +x "$HOME/.local/bin/rtk"
 ```
 
-> Installs to `~/.local/bin`. Add to PATH if needed:
+> Add `~/.local/bin` to PATH if needed:
 > ```bash
 > echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
 > ```
 
-### Cargo
+### Cargo (direct from fork)
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/mp3wizard/rtk
 ```
-
-### Pre-built Binaries
-
-Download from [releases](https://github.com/rtk-ai/rtk/releases):
-- macOS: `rtk-x86_64-apple-darwin.tar.gz` / `rtk-aarch64-apple-darwin.tar.gz`
-- Linux: `rtk-x86_64-unknown-linux-musl.tar.gz` / `rtk-aarch64-unknown-linux-gnu.tar.gz`
-- Windows: `rtk-x86_64-pc-windows-msvc.zip`
-
-> **Windows users**: Extract the zip and place `rtk.exe` somewhere in your PATH (e.g. `C:\Users\<you>\.local\bin`). Run RTK from **Command Prompt**, **PowerShell**, or **Windows Terminal** — do not double-click the `.exe` (it will flash and close). For the best experience, use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) where the full hook system works natively. See [Windows setup](#windows) below for details.
 
 ### Verify Installation
 
 ```bash
-rtk --version   # Should show "rtk 0.28.2"
+rtk --version   # Should show current version
 rtk gain        # Should show token savings stats
 ```
 
-> **Name collision warning**: Another project named "rtk" (Rust Type Kit) exists on crates.io. If `rtk gain` fails, you have the wrong package. Use `cargo install --git` above instead.
+> **Name collision warning**: Another project named "rtk" (Rust Type Kit) exists on crates.io. Always install from the git source above, not `cargo install rtk`.
 
 ## Quick Start
 
@@ -322,7 +324,9 @@ For the best experience, use [WSL](https://learn.microsoft.com/en-us/windows/wsl
 
 ```bash
 # Inside WSL
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+git clone https://github.com/mp3wizard/rtk
+cd rtk
+cargo install --path .
 rtk init -g
 ```
 
@@ -478,10 +482,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-05-23 |
+| Last audit | 2026-05-27 |
 | Status | PASSED |
-| Summary | 4 upstream commits merged (fix/git-status-uall). No actionable issues: OSV clean (203 packages), root Cargo.lock pins rustls-webpki 0.103.13, 0 verified secrets; all scanner flags are FPs in test fixtures/docs or global Claude config. |
-| Report | [Security reports/security-audit-2026-05-23.md](Security%20reports/security-audit-2026-05-23.md) |
+| Summary | 19 upstream commits merged (grep/ls/hook/license fixes). Main Cargo.lock clean (0 vulns); 0 verified secrets; Semgrep 0 findings; worktree-only rustls-webpki HIGH (GHSA-82j2-j2ch-gfr8) already fixed at 0.103.13 in main. |
+| Report | [Security reports/security-audit-2026-05-27.md](Security%20reports/security-audit-2026-05-27.md) |
 
 ## Contributing
 
