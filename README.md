@@ -483,10 +483,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-05-27 |
+| Last audit | 2026-05-31 |
 | Status | PASSED |
-| Summary | 19 upstream commits merged (grep/ls/hook/license fixes). Main Cargo.lock clean (0 vulns); 0 verified secrets; Semgrep 0 findings; worktree-only rustls-webpki HIGH (GHSA-82j2-j2ch-gfr8) already fixed at 0.103.13 in main. |
-| Report | [Security reports/security-audit-2026-05-27.md](Security%20reports/security-audit-2026-05-27.md) |
+| Summary | 21 upstream commits merged (Copilot CLI hook support, gh/glab fix, SIGPIPE fix). Main Cargo.lock clean (0 vulns); 0 verified secrets; Semgrep 0 findings; worktree-only rustls-webpki HIGH (GHSA-82j2-j2ch-gfr8) already fixed at 0.103.13 in main. |
+| Report | [Security reports/security-audit-2026-05-31.md](Security%20reports/security-audit-2026-05-31.md) |
 
 ## Contributing
 
