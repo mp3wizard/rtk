@@ -13,7 +13,8 @@ use crate::hooks::constants::{
 };
 
 use super::constants::{
-    BEFORE_TOOL_KEY, CLAUDE_DIR, CLAUDE_HOOK_COMMAND, CODEX_DIR, CURSOR_HOOK_COMMAND,
+    BEFORE_TOOL_KEY, CLAUDE_DIR, CLAUDE_HOOK_COMMAND, CODEX_DIR, CURSOR_HOOK_COMMAND, DROID_DIR,
+    DROID_EXECUTE_MATCHER, DROID_HOME_ENV, DROID_HOOK_COMMAND, DROID_SETTINGS_FILE,
     GEMINI_HOOK_FILE, HERMES_DIR, HERMES_PLUGINS_SUBDIR, HERMES_PLUGIN_INIT_FILE,
     HERMES_PLUGIN_MANIFEST_FILE, HERMES_PLUGIN_NAME, HOOKS_JSON, HOOKS_SUBDIR,
     PI_CODING_AGENT_DIR_ENV, PI_DIR, PI_EXTENSIONS_SUBDIR, PI_LOCAL_DIR, PI_PLUGIN_FILE,
@@ -2843,6 +2844,335 @@ fn resolve_hermes_home_from_env(
         .context("Cannot determine Hermes home directory. Set $HERMES_HOME or $HOME.")
 }
 
+// ─── Factory Droid support ──────────────────────────────────────────
+
+/// Resolve Droid config directory, honouring `FACTORY_HOME` override.
+///
+/// - Global: `$FACTORY_HOME` or `~/.factory`.
+/// - Project: caller passes `.factory` relative to project root.
+fn resolve_droid_dir() -> Result<PathBuf> {
+    resolve_droid_dir_from_env(dirs::home_dir(), std::env::var_os(DROID_HOME_ENV))
+}
+
+fn resolve_droid_dir_from_env(
+    home_dir: Option<PathBuf>,
+    factory_home: Option<OsString>,
+) -> Result<PathBuf> {
+    if let Some(path) = factory_home.filter(|value| !value.is_empty()) {
+        return Ok(PathBuf::from(path));
+    }
+    home_dir
+        .map(|home| home.join(DROID_DIR))
+        .context("Cannot determine Droid config directory. Set $FACTORY_HOME or $HOME.")
+}
+
+/// Install Factory Droid PreToolUse hook into `settings.json`.
+///
+/// - Global (`-g`): writes to `~/.factory/settings.json` (or `$FACTORY_HOME/settings.json`).
+/// - Project: writes to `<cwd>/.factory/settings.json` so the hook can be committed.
+pub fn run_droid_mode(global: bool, ctx: InitContext) -> Result<()> {
+    let droid_dir = if global {
+        resolve_droid_dir()?
+    } else {
+        std::env::current_dir()
+            .context("Failed to read current directory")?
+            .join(DROID_DIR)
+    };
+    run_droid_mode_at(&droid_dir, global, ctx)
+}
+
+fn run_droid_mode_at(droid_dir: &Path, global: bool, ctx: InitContext) -> Result<()> {
+    let InitContext { dry_run, .. } = ctx;
+
+    if !dry_run {
+        fs::create_dir_all(droid_dir).with_context(|| {
+            format!(
+                "Failed to create Droid config directory: {}",
+                droid_dir.display()
+            )
+        })?;
+    }
+
+    let settings_path = droid_dir.join(DROID_SETTINGS_FILE);
+    let patched = patch_droid_settings_json(&settings_path, ctx)?;
+
+    if dry_run {
+        print_dry_run_footer();
+    } else {
+        let scope = if global { "global" } else { "project" };
+        println!("\nFactory Droid hook registered ({scope}).\n");
+        println!("  Command:  {}", DROID_HOOK_COMMAND);
+        println!("  Settings: {}", settings_path.display());
+        if patched {
+            println!("  settings.json: RTK PreToolUse entry added");
+        } else {
+            println!("  settings.json: RTK PreToolUse entry already present");
+        }
+        println!("  Restart Droid. Test with: git status\n");
+    }
+
+    Ok(())
+}
+
+/// Insert RTK PreToolUse entry into Droid settings.json.
+/// Returns true if the file was modified.
+fn patch_droid_settings_json(path: &Path, ctx: InitContext) -> Result<bool> {
+    let InitContext { verbose, dry_run } = ctx;
+    let mut root = if path.exists() {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read {}", path.display()))?;
+        if content.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse {} as JSON", path.display()))?
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    if droid_hook_already_present(&root) {
+        if verbose > 0 {
+            eprintln!("Droid settings.json: RTK hook already present");
+        }
+        return Ok(false);
+    }
+
+    insert_droid_hook_entry(&mut root)?;
+
+    let serialized =
+        serde_json::to_string_pretty(&root).context("Failed to serialize Droid settings.json")?;
+
+    if dry_run {
+        println!(
+            "[dry-run] would patch Droid settings.json: {}",
+            path.display()
+        );
+        if verbose > 0 {
+            println!("[dry-run] content:\n{}", serialized);
+        }
+        return Ok(true);
+    }
+
+    if path.exists() {
+        let backup_path = path.with_extension("json.bak");
+        fs::copy(path, &backup_path)
+            .with_context(|| format!("Failed to backup to {}", backup_path.display()))?;
+        if verbose > 0 {
+            eprintln!("Backup: {}", backup_path.display());
+        }
+    }
+
+    atomic_write(path, &serialized)?;
+    Ok(true)
+}
+
+/// Check if RTK PreToolUse Execute hook is already in Droid settings.json.
+fn droid_hook_already_present(root: &serde_json::Value) -> bool {
+    let pre = match root
+        .get("hooks")
+        .and_then(|h| h.get(PRE_TOOL_USE_KEY))
+        .and_then(|p| p.as_array())
+    {
+        Some(arr) => arr,
+        None => return false,
+    };
+
+    pre.iter().any(|matcher_entry| {
+        let hooks = matcher_entry
+            .get("hooks")
+            .and_then(|h| h.as_array())
+            .map(|arr| arr.as_slice())
+            .unwrap_or(&[]);
+        hooks.iter().any(|hook| {
+            hook.get("command")
+                .and_then(|c| c.as_str())
+                .is_some_and(|cmd| cmd == DROID_HOOK_COMMAND)
+        })
+    })
+}
+
+/// Insert the RTK Execute matcher into Droid settings.json.
+fn insert_droid_hook_entry(root: &mut serde_json::Value) -> Result<()> {
+    let root_obj = match root.as_object_mut() {
+        Some(obj) => obj,
+        None => {
+            *root = serde_json::json!({});
+            root.as_object_mut().expect("just-created json object")
+        }
+    };
+
+    let hooks = root_obj
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .context("hooks value is not an object")?;
+
+    let pre_tool_use = hooks
+        .entry(PRE_TOOL_USE_KEY)
+        .or_insert_with(|| serde_json::json!([]))
+        .as_array_mut()
+        .context("PreToolUse value is not an array")?;
+
+    // Reuse the existing Execute matcher group if one exists, otherwise create
+    // a new one so we don't trample user-supplied hooks on the same matcher.
+    for entry in pre_tool_use.iter_mut() {
+        let matcher = entry
+            .get("matcher")
+            .and_then(|m| m.as_str())
+            .unwrap_or_default();
+        if matcher == DROID_EXECUTE_MATCHER {
+            if let Some(hook_array) = entry.get_mut("hooks").and_then(|h| h.as_array_mut()) {
+                hook_array.push(serde_json::json!({
+                    "type": "command",
+                    "command": DROID_HOOK_COMMAND
+                }));
+                return Ok(());
+            }
+        }
+    }
+
+    pre_tool_use.push(serde_json::json!({
+        "matcher": DROID_EXECUTE_MATCHER,
+        "hooks": [
+            { "type": "command", "command": DROID_HOOK_COMMAND }
+        ]
+    }));
+    Ok(())
+}
+
+/// Uninstall Factory Droid integration: strip RTK hook entry from settings.json.
+pub fn uninstall_droid(global: bool, ctx: InitContext) -> Result<()> {
+    let InitContext { dry_run, .. } = ctx;
+    let droid_dir = if global {
+        resolve_droid_dir()?
+    } else {
+        std::env::current_dir()
+            .context("Failed to read current directory")?
+            .join(DROID_DIR)
+    };
+    let removed = uninstall_droid_at(&droid_dir, ctx)?;
+
+    if removed.is_empty() {
+        println!("RTK Droid support was not installed (nothing to remove)");
+    } else {
+        let header = if dry_run {
+            "[dry-run] would uninstall RTK for Factory Droid:"
+        } else {
+            "RTK uninstalled for Factory Droid:"
+        };
+        println!("{}", header);
+        for item in removed {
+            println!("  - {}", item);
+        }
+    }
+
+    if dry_run {
+        print_dry_run_footer();
+    }
+    Ok(())
+}
+
+fn uninstall_droid_at(droid_dir: &Path, ctx: InitContext) -> Result<Vec<String>> {
+    let InitContext { verbose, dry_run } = ctx;
+    let mut removed = Vec::new();
+
+    let settings_path = droid_dir.join(DROID_SETTINGS_FILE);
+    if !settings_path.exists() {
+        return Ok(removed);
+    }
+
+    let content = fs::read_to_string(&settings_path)
+        .with_context(|| format!("Failed to read {}", settings_path.display()))?;
+    if content.trim().is_empty() {
+        return Ok(removed);
+    }
+
+    let mut root: serde_json::Value = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse {} as JSON", settings_path.display()))?;
+
+    if !remove_droid_hook_from_json(&mut root) {
+        return Ok(removed);
+    }
+
+    if dry_run {
+        println!(
+            "[dry-run] would remove RTK entry from Droid settings.json: {}",
+            settings_path.display()
+        );
+    } else {
+        let backup_path = settings_path.with_extension("json.bak");
+        fs::copy(&settings_path, &backup_path).ok();
+
+        let serialized = serde_json::to_string_pretty(&root)
+            .context("Failed to serialize Droid settings.json")?;
+        atomic_write(&settings_path, &serialized)?;
+
+        if verbose > 0 {
+            eprintln!("Removed RTK hook from Droid settings.json");
+        }
+    }
+    removed.push(format!("Droid settings.json: {}", settings_path.display()));
+    Ok(removed)
+}
+
+fn remove_droid_hook_from_json(root: &mut serde_json::Value) -> bool {
+    let hooks_obj = match root.get_mut("hooks").and_then(|h| h.as_object_mut()) {
+        Some(o) => o,
+        None => return false,
+    };
+
+    let pre_tool_use = match hooks_obj
+        .get_mut(PRE_TOOL_USE_KEY)
+        .and_then(|p| p.as_array_mut())
+    {
+        Some(arr) => arr,
+        None => return false,
+    };
+
+    let mut modified = false;
+
+    for entry in pre_tool_use.iter_mut() {
+        if let Some(hook_arr) = entry.get_mut("hooks").and_then(|h| h.as_array_mut()) {
+            let original = hook_arr.len();
+            hook_arr.retain(|hook| {
+                hook.get("command")
+                    .and_then(|c| c.as_str())
+                    .is_none_or(|cmd| cmd != DROID_HOOK_COMMAND)
+            });
+            if hook_arr.len() < original {
+                modified = true;
+            }
+        }
+    }
+
+    // Drop matcher entries that lost all their hooks.
+    let before = pre_tool_use.len();
+    pre_tool_use.retain(|entry| {
+        entry
+            .get("hooks")
+            .and_then(|h| h.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(true)
+    });
+    if pre_tool_use.len() < before {
+        modified = true;
+    }
+
+    // Drop empty PreToolUse array, then empty hooks object.
+    if pre_tool_use.is_empty() {
+        hooks_obj.remove(PRE_TOOL_USE_KEY);
+        modified = true;
+    }
+    if hooks_obj.is_empty() {
+        if let Some(obj) = root.as_object_mut() {
+            obj.remove("hooks");
+        }
+    }
+
+    modified
+}
+
 fn codex_rtk_md_ref(codex_dir: &Path) -> String {
     format!("@{}", codex_dir.join(RTK_MD).display())
 }
@@ -5151,6 +5481,148 @@ mod tests {
 
         assert_eq!(empty_falls_back, home_dir.join(".hermes"));
         assert_eq!(missing_falls_back, home_dir.join(".hermes"));
+    }
+
+    // --- Factory Droid ---
+
+    #[test]
+    fn test_resolve_droid_dir_prefers_factory_home() {
+        let factory_home = OsString::from("/custom/factory");
+        let resolved =
+            resolve_droid_dir_from_env(Some(PathBuf::from("/tmp/home")), Some(factory_home))
+                .unwrap();
+        assert_eq!(resolved, PathBuf::from("/custom/factory"));
+    }
+
+    #[test]
+    fn test_resolve_droid_dir_falls_back_to_home() {
+        let home = PathBuf::from("/tmp/home");
+        let resolved =
+            resolve_droid_dir_from_env(Some(home.clone()), Some(OsString::new())).unwrap();
+        assert_eq!(resolved, home.join(".factory"));
+    }
+
+    #[test]
+    fn test_insert_droid_hook_entry_empty() {
+        let mut root = serde_json::json!({});
+        insert_droid_hook_entry(&mut root).unwrap();
+        let pre = root["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre.len(), 1);
+        assert_eq!(pre[0]["matcher"], "Execute");
+        let hooks = pre[0]["hooks"].as_array().unwrap();
+        assert_eq!(hooks[0]["type"], "command");
+        assert_eq!(hooks[0]["command"], DROID_HOOK_COMMAND);
+    }
+
+    #[test]
+    fn test_insert_droid_hook_entry_reuses_execute_group() {
+        let mut root = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Execute",
+                    "hooks": [{ "type": "command", "command": "echo user-hook" }]
+                }]
+            }
+        });
+        insert_droid_hook_entry(&mut root).unwrap();
+        let pre = root["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre.len(), 1, "must not duplicate the matcher entry");
+        let hooks = pre[0]["hooks"].as_array().unwrap();
+        assert_eq!(hooks.len(), 2);
+        assert_eq!(hooks[0]["command"], "echo user-hook");
+        assert_eq!(hooks[1]["command"], DROID_HOOK_COMMAND);
+    }
+
+    #[test]
+    fn test_droid_hook_already_present_detects_rtk() {
+        let root = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Execute",
+                    "hooks": [{ "type": "command", "command": DROID_HOOK_COMMAND }]
+                }]
+            }
+        });
+        assert!(droid_hook_already_present(&root));
+    }
+
+    #[test]
+    fn test_droid_hook_already_present_false_for_other_command() {
+        let root = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Execute",
+                    "hooks": [{ "type": "command", "command": "echo unrelated" }]
+                }]
+            }
+        });
+        assert!(!droid_hook_already_present(&root));
+    }
+
+    #[test]
+    fn test_remove_droid_hook_keeps_other_hooks() {
+        let mut root = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Execute",
+                    "hooks": [
+                        { "type": "command", "command": "echo user-hook" },
+                        { "type": "command", "command": DROID_HOOK_COMMAND }
+                    ]
+                }]
+            }
+        });
+        assert!(remove_droid_hook_from_json(&mut root));
+        let hooks = root["hooks"]["PreToolUse"][0]["hooks"].as_array().unwrap();
+        assert_eq!(hooks.len(), 1);
+        assert_eq!(hooks[0]["command"], "echo user-hook");
+    }
+
+    #[test]
+    fn test_remove_droid_hook_drops_empty_matcher() {
+        let mut root = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Execute",
+                    "hooks": [
+                        { "type": "command", "command": DROID_HOOK_COMMAND }
+                    ]
+                }]
+            }
+        });
+        assert!(remove_droid_hook_from_json(&mut root));
+        assert!(
+            root.get("hooks").is_none(),
+            "hooks key should be removed when empty"
+        );
+    }
+
+    #[test]
+    fn test_droid_install_then_uninstall_round_trip() {
+        let temp = TempDir::new().unwrap();
+        let droid_dir = temp.path().join(".factory");
+        let ctx = InitContext {
+            verbose: 0,
+            dry_run: false,
+        };
+
+        run_droid_mode_at(&droid_dir, true, ctx).unwrap();
+        let settings = droid_dir.join("settings.json");
+        assert!(settings.exists(), "settings.json should be created");
+
+        // Second run is a no-op (idempotent).
+        run_droid_mode_at(&droid_dir, true, ctx).unwrap();
+        let content = fs::read_to_string(&settings).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let hooks = v["hooks"]["PreToolUse"][0]["hooks"].as_array().unwrap();
+        assert_eq!(hooks.len(), 1, "install must be idempotent");
+
+        // Uninstall wipes the entry and the (now empty) hooks key.
+        let removed = uninstall_droid_at(&droid_dir, ctx).unwrap();
+        assert!(!removed.is_empty());
+        let post = fs::read_to_string(&settings).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&post).unwrap();
+        assert!(v.get("hooks").is_none());
     }
 
     #[test]
