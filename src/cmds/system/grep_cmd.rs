@@ -51,12 +51,63 @@ const VALUE_FLAGS_LONG: &[&str] = &[
     "--colors",
 ];
 
-/// Strip `r`/`R` from the boolean-flag portion of a short cluster.
-/// Returns `None` when nothing remains (the cluster was purely recursive flags).
+/// Result of parsing the content of a short flag cluster (the part after `-`).
+#[derive(Debug, PartialEq)]
+enum ClusterResult {
+    /// All chars were boolean flags or `r`/`R` (stripped).
+    /// `None` when the entire cluster reduces to nothing after stripping.
+    Boolean(Option<String>),
+    /// A value-taking flag was encountered. Scanning stops here.
+    ValueTaking {
+        /// Boolean flags before the value-taking char, `r`/`R` stripped.
+        prefix: Option<String>,
+        /// The value-taking flag char (`e`, `A`, `g`, etc.).
+        flag: char,
+        /// Bytes after `flag` in the cluster — its inline value.
+        /// Empty string means "consume the next token instead."
+        inline: String,
+    },
+}
+
+/// Parse the content of a short flag cluster (everything after the leading `-`).
 ///
-/// IMPORTANT: must only be called on the accumulated flag-letter prefix, never
-/// on inline values — `strip_r("carrot")` would corrupt the value to `"caot"`,
-/// which is exactly the original bug this function replaces.
+/// Scans left-to-right: strips `r`/`R`, accumulates boolean flag letters, and
+/// stops at the first value-taking flag (from `VALUE_FLAGS_SHORT` or `e`).
+/// Everything after that flag char in the cluster is its inline value and is
+/// returned verbatim — no `r`/`R` stripping is applied to it.
+///
+/// This is the only place in the codebase that touches cluster bytes.
+fn parse_cluster(rest: &str) -> ClusterResult {
+    let bytes = rest.as_bytes();
+    let mut raw_prefix = String::new();
+    let mut j = 0;
+    while j < bytes.len() {
+        let ch = bytes[j];
+        let is_e = ch == b'e';
+        if is_e || VALUE_FLAGS_SHORT.contains(&ch) {
+            let prefix = strip_r(&raw_prefix);
+            // Inline value = bytes after this char; returned verbatim (no stripping).
+            let inline = std::str::from_utf8(&bytes[j + 1..])
+                .unwrap_or("")
+                .to_string();
+            return ClusterResult::ValueTaking {
+                prefix,
+                flag: ch as char,
+                inline,
+            };
+        }
+        raw_prefix.push(ch as char);
+        j += 1;
+    }
+    ClusterResult::Boolean(strip_r(&raw_prefix))
+}
+
+/// Strip `r`/`R` from a string of flag letters.
+/// Returns `None` when nothing remains after stripping.
+///
+/// Only called on accumulated flag letters (never on inline values).
+/// `strip_r("carrot")` → `Some("caot")` — this shows exactly why it must not
+/// touch value bytes; that corruption was the original `-ecarrot` bug.
 fn strip_r(flag_letters: &str) -> Option<String> {
     let s: String = flag_letters
         .chars()
@@ -140,62 +191,46 @@ fn extract_pattern_path<T: AsRef<str>>(args: &[T]) -> (Vec<String>, Vec<String>,
         }
 
         match arg.strip_prefix('-') {
-            Some(rest) if !rest.is_empty() => {
-                // Left-to-right scan: accumulate flag letters (including r/R) into
-                // raw_prefix; strip_r is called at emit time so it is never applied
-                // to inline value bytes (which follow the first value-taking char).
-                let bytes = rest.as_bytes();
-                let mut raw_prefix = String::new();
-                let mut consumed_value = false;
-                let mut j = 0;
-                while j < bytes.len() {
-                    let ch = bytes[j];
-                    let is_e = ch == b'e';
-                    if is_e || VALUE_FLAGS_SHORT.contains(&ch) {
-                        // Emit the boolean prefix with r/R stripped.
-                        if let Some(prefix) = strip_r(&raw_prefix) {
-                            flags.push(format!("-{}", prefix));
-                        }
-                        // Inline value = bytes after this char in the cluster.
-                        // strip_r is NOT called here — these are value bytes, not flags.
-                        let inline = std::str::from_utf8(&bytes[j + 1..]).unwrap_or("");
-                        if is_e {
-                            if !inline.is_empty() {
-                                e_patterns.push(inline.to_string());
-                                i += 1;
-                            } else if i + 1 < args.len() {
-                                e_patterns.push(args[i + 1].as_ref().to_string());
-                                i += 2;
-                            } else {
-                                flags.push("-e".to_string());
-                                i += 1;
-                            }
-                        } else {
-                            flags.push(format!("-{}", ch as char));
-                            if !inline.is_empty() {
-                                flags.push(inline.to_string());
-                                i += 1;
-                            } else if i + 1 < args.len() {
-                                flags.push(args[i + 1].as_ref().to_string());
-                                i += 2;
-                            } else {
-                                i += 1;
-                            }
-                        }
-                        consumed_value = true;
-                        break;
-                    }
-                    raw_prefix.push(ch as char);
-                    j += 1;
-                }
-                if !consumed_value {
-                    // Pure boolean cluster: strip r/R, emit remainder.
-                    if let Some(stripped) = strip_r(&raw_prefix) {
-                        flags.push(format!("-{}", stripped));
+            Some(rest) if !rest.is_empty() => match parse_cluster(rest) {
+                ClusterResult::Boolean(prefix) => {
+                    if let Some(s) = prefix {
+                        flags.push(format!("-{}", s));
                     }
                     i += 1;
                 }
-            }
+                ClusterResult::ValueTaking {
+                    prefix,
+                    flag,
+                    inline,
+                } => {
+                    if let Some(s) = prefix {
+                        flags.push(format!("-{}", s));
+                    }
+                    if flag == 'e' {
+                        if !inline.is_empty() {
+                            e_patterns.push(inline);
+                            i += 1;
+                        } else if i + 1 < args.len() {
+                            e_patterns.push(args[i + 1].as_ref().to_string());
+                            i += 2;
+                        } else {
+                            flags.push("-e".to_string());
+                            i += 1;
+                        }
+                    } else {
+                        flags.push(format!("-{}", flag));
+                        if !inline.is_empty() {
+                            flags.push(inline);
+                            i += 1;
+                        } else if i + 1 < args.len() {
+                            flags.push(args[i + 1].as_ref().to_string());
+                            i += 2;
+                        } else {
+                            i += 1;
+                        }
+                    }
+                }
+            },
             _ => {
                 positionals.push(arg.to_string());
                 i += 1;
@@ -578,26 +613,112 @@ mod tests {
         assert_eq!(rg_pattern, "fn foo|pub.*bar");
     }
 
-    // --- strip_r / strip_recursive ---
+    // --- parse_cluster ---
+
+    fn vt(prefix: Option<&str>, flag: char, inline: &str) -> ClusterResult {
+        ClusterResult::ValueTaking {
+            prefix: prefix.map(|s| s.to_string()),
+            flag,
+            inline: inline.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_parse_cluster_boolean_only() {
+        // Pure boolean clusters: r/R stripped, remainder emitted
+        assert_eq!(parse_cluster("r"), ClusterResult::Boolean(None));
+        assert_eq!(parse_cluster("R"), ClusterResult::Boolean(None));
+        assert_eq!(parse_cluster("rR"), ClusterResult::Boolean(None));
+        assert_eq!(parse_cluster("rn"), ClusterResult::Boolean(Some("n".to_string())));
+        assert_eq!(parse_cluster("Rni"), ClusterResult::Boolean(Some("ni".to_string())));
+        assert_eq!(parse_cluster("n"), ClusterResult::Boolean(Some("n".to_string())));
+        assert_eq!(parse_cluster("ni"), ClusterResult::Boolean(Some("ni".to_string())));
+    }
+
+    #[test]
+    fn test_parse_cluster_e_no_inline() {
+        // -e: value-taking, empty inline → caller consumes next token
+        assert_eq!(parse_cluster("e"), vt(None, 'e', ""));
+    }
+
+    #[test]
+    fn test_parse_cluster_e_inline_value() {
+        // -ecarrot: inline="carrot" — no r/R stripping on the value bytes
+        assert_eq!(parse_cluster("ecarrot"), vt(None, 'e', "carrot"));
+    }
+
+    #[test]
+    fn test_parse_cluster_e_inline_value_no_rstrip() {
+        // The 'r' chars in "carrot" must survive verbatim in the inline field.
+        // If strip_r were called on inline bytes, this would return "caot".
+        let ClusterResult::ValueTaking { inline, .. } = parse_cluster("ecarrot") else {
+            panic!("expected ValueTaking");
+        };
+        assert_eq!(inline, "carrot");
+    }
+
+    #[test]
+    fn test_parse_cluster_g_inline_glob() {
+        // -g*.rs: inline="*.rs" — 'r' in "*.rs" must not be stripped
+        assert_eq!(parse_cluster("g*.rs"), vt(None, 'g', "*.rs"));
+        let ClusterResult::ValueTaking { inline, .. } = parse_cluster("g*.rs") else {
+            panic!("expected ValueTaking");
+        };
+        assert_eq!(inline, "*.rs");
+    }
+
+    #[test]
+    fn test_parse_cluster_rne() {
+        // -rne: r stripped, n in boolean prefix, e is value-taking (empty inline)
+        assert_eq!(parse_cluster("rne"), vt(Some("n"), 'e', ""));
+    }
+
+    #[test]
+    fn test_parse_cluster_r_a() {
+        // -rA: r stripped, A is value-taking (empty inline → consume next token)
+        assert_eq!(parse_cluster("rA"), vt(None, 'A', ""));
+    }
+
+    #[test]
+    fn test_parse_cluster_ni_a() {
+        // -niA: n and i boolean, A value-taking
+        assert_eq!(parse_cluster("niA"), vt(Some("ni"), 'A', ""));
+    }
+
+    #[test]
+    fn test_parse_cluster_ai_inline() {
+        // -Ai: A value-taking, inline="i" (the 'i' is A's value, not a separate flag)
+        assert_eq!(parse_cluster("Ai"), vt(None, 'A', "i"));
+    }
+
+    #[test]
+    fn test_parse_cluster_short_type() {
+        assert_eq!(parse_cluster("t"), vt(None, 't', ""));
+        assert_eq!(parse_cluster("tpy"), vt(None, 't', "py")); // inline type name
+    }
+
+    #[test]
+    fn test_parse_cluster_short_max_columns() {
+        assert_eq!(parse_cluster("M"), vt(None, 'M', ""));
+        assert_eq!(parse_cluster("M120"), vt(None, 'M', "120"));
+    }
+
+    // --- strip_r ---
 
     #[test]
     fn test_strip_r() {
-        // Pure r/R → None (whole cluster dropped)
         assert_eq!(strip_r("r"), None);
         assert_eq!(strip_r("R"), None);
-        assert_eq!(strip_r("rr"), None);
         assert_eq!(strip_r("rR"), None);
         assert_eq!(strip_r(""), None);
-        // Mixed → r/R removed, rest kept
         assert_eq!(strip_r("rn"), Some("n".to_string()));
         assert_eq!(strip_r("Rni"), Some("ni".to_string()));
-        assert_eq!(strip_r("rni"), Some("ni".to_string()));
         assert_eq!(strip_r("i"), Some("i".to_string()));
-        // Reveals the danger: strip_r must NEVER be called on value bytes.
-        // Calling it on "carrot" strips both 'r's and produces "caot" — this
-        // is exactly the original bug (-ecarrot matching "caot" instead of "carrot").
+        // Shows why it must only be called on flag letters, not value bytes:
         assert_eq!(strip_r("carrot"), Some("caot".to_string()));
     }
+
+    // --- strip_recursive ---
 
     #[test]
     fn test_strip_recursive() {
