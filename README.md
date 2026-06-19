@@ -488,10 +488,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-06-17 |
+| Last audit | 2026-06-19 |
 | Status | PASSED |
-| Summary | 3 upstream commits merged (grep BSD/macOS portability fix, diff modified-only detection). Main Cargo.lock clean (0 CVEs, 203 crates); 0 verified secrets (TruffleHog); Semgrep 0 findings; all Gitleaks/OSV/Trivy findings confirmed false positives or test fixtures. |
-| Report | [Security reports/security-audit-2026-06-17.md](Security%20reports/security-audit-2026-06-17.md) |
+| Summary | 8 upstream commits merged (OpenShift CLI support, grep error-exit fix, uv run pytest hook). Main Cargo.lock clean (0 CVEs, 203 crates, rustls-webpki 0.103.13 patched); 0 verified secrets (TruffleHog); Semgrep 0 secret findings; all Gitleaks/OSV findings confirmed false positives or test fixtures. |
+| Report | [Security reports/security-audit-2026-06-19.md](Security%20reports/security-audit-2026-06-19.md) |
 
 ## Contributing
 
