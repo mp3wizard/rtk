@@ -2941,6 +2941,7 @@ mod tests {
             "dotnet",
             "docker",
             "kubectl",
+            "oc",
             "summary",
             "grep",
             "wget",
