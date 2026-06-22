@@ -9,18 +9,19 @@ mod parser;
 // Re-export command modules for routing
 use cmds::cloud::{aws_cmd, container, curl_cmd, psql_cmd, wget_cmd};
 use cmds::dotnet::{binlog, dotnet_cmd, dotnet_format_report, dotnet_trx};
-use cmds::git::{diff_cmd, gh_cmd, git, gt_cmd};
+use cmds::git::{diff_cmd, gh_cmd, git, glab_cmd, gt_cmd};
 use cmds::go::{go_cmd, golangci_cmd};
 use cmds::js::{
     lint_cmd, next_cmd, npm_cmd, playwright_cmd, pnpm_cmd, prettier_cmd, prisma_cmd, tsc_cmd,
     vitest_cmd,
 };
+use cmds::jvm::{gradlew_cmd, mvn_cmd};
 use cmds::python::{mypy_cmd, pip_cmd, pytest_cmd, ruff_cmd};
 use cmds::ruby::{rake_cmd, rspec_cmd, rubocop_cmd};
 use cmds::rust::{cargo_cmd, runner};
 use cmds::system::{
-    deps, env_cmd, find_cmd, format_cmd, grep_cmd, json_cmd, local_llm, log_cmd, ls, read, summary,
-    tree, wc_cmd,
+    deps, env_cmd, find_cmd, format_cmd, grep_cmd, json_cmd, local_llm, log_cmd, ls, pipe_cmd,
+    read, summary, tree, wc_cmd,
 };
 
 use anyhow::{Context, Result};
@@ -44,6 +45,10 @@ pub enum AgentTarget {
     Kilocode,
     /// Google Antigravity
     Antigravity,
+    /// Pi coding agent
+    Pi,
+    /// Hermes CLI
+    Hermes,
 }
 
 #[derive(Parser)]
@@ -57,8 +62,8 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// Verbosity level (-v, -vv, -vvv)
-    #[arg(short, long, action = clap::ArgAction::Count, global = true)]
+    /// Verbosity level (-v, -vv, -vvv) — only recognized before the subcommand
+    #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 
     /// Ultra-compact mode: ASCII icons, inline format (Level 2 optimizations)
@@ -158,6 +163,21 @@ enum Commands {
     /// GitHub CLI (gh) commands with token-optimized output
     Gh {
         /// Subcommand: pr, issue, run, repo
+        subcommand: String,
+        /// Additional arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// GitLab CLI (glab) commands with token-optimized output
+    Glab {
+        /// Target repository (owner/repo), passed as glab -R flag
+        #[arg(short = 'R', long = "repo")]
+        repo: Option<String>,
+        /// Target group, passed as glab -g flag
+        #[arg(short = 'g', long = "group")]
+        group: Option<String>,
+        /// Subcommand: mr, issue, ci, pipeline, api
         subcommand: String,
         /// Additional arguments
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -273,6 +293,12 @@ enum Commands {
         command: KubectlCommands,
     },
 
+    /// OpenShift CLI (oc) commands with compact output
+    Oc {
+        #[command(subcommand)]
+        command: OcCommands,
+    },
+
     /// Run command and show heuristic summary
     Summary {
         /// Command to run and summarize
@@ -282,11 +308,6 @@ enum Commands {
 
     /// Compact grep - strips whitespace, truncates, groups by file
     Grep {
-        /// Pattern to search
-        pattern: String,
-        /// Path to search in
-        #[arg(default_value = ".")]
-        path: String,
         /// Max line length
         #[arg(short = 'l', long, default_value = "80")]
         max_len: usize,
@@ -294,15 +315,12 @@ enum Commands {
         #[arg(short, long, default_value = "200")]
         max: usize,
         /// Show only match context (not full line)
-        #[arg(short, long)]
+        #[arg(long)]
         context_only: bool,
         /// Filter by file type (e.g., ts, py, rust)
         #[arg(short = 't', long)]
         file_type: Option<String>,
-        /// Show line numbers (always on, accepted for grep/rg compatibility)
-        #[arg(short = 'n', long)]
-        line_numbers: bool,
-        /// Extra ripgrep arguments (e.g., -i, -A 3, -w, --glob)
+        /// Pattern, path, and any grep/rg flags (e.g. -v, -i, -A 3, --glob, --version)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
     },
@@ -356,6 +374,9 @@ enum Commands {
         /// Install GitHub Copilot integration (VS Code + CLI)
         #[arg(long)]
         copilot: bool,
+        /// Preview changes without writing any files (combine with -v to show content)
+        #[arg(long = "dry-run", conflicts_with = "show")]
+        dry_run: bool,
     },
 
     /// Download with compact output (strips progress bars)
@@ -412,6 +433,12 @@ enum Commands {
         /// Show parse failure log (commands that fell back to raw execution)
         #[arg(short = 'F', long)]
         failures: bool,
+        /// Reset all token savings stats to zero
+        #[arg(long)]
+        reset: bool,
+        /// Skip confirmation prompt when resetting
+        #[arg(long, requires = "reset")]
+        yes: bool,
     },
 
     /// Claude Code economics: spending (ccusage) vs savings (rtk) analysis
@@ -582,11 +609,32 @@ enum Commands {
         min_occurrences: usize,
     },
 
+    /// Execute a shell command via sh -c (raw, no filtering or tracking)
+    Run {
+        /// Command string to execute (use -c for shell-like invocation)
+        #[arg(short = 'c', long = "command")]
+        command: Option<String>,
+        /// Positional command arguments (alternative to -c)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
     /// Execute command without filtering but track usage
     Proxy {
         /// Command and arguments to execute
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<OsString>,
+    },
+
+    /// Read stdin, apply filter, print filtered output (Unix pipe mode)
+    Pipe {
+        /// Filter name (cargo-test, pytest, grep, find, git-log, etc.)
+        #[arg(short, long)]
+        filter: Option<String>,
+
+        /// Pass stdin through without filtering
+        #[arg(long)]
+        passthrough: bool,
     },
 
     /// Trust project-local TOML filters in current directory
@@ -678,6 +726,22 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// Android Gradle wrapper with compact output (build, test, lint)
+    #[command(name = "gradlew")]
+    Gradlew {
+        /// Gradle tasks and arguments (e.g., assembleDebug, testDebugUnitTest, lint, --info)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Apache Maven wrapper with compact output (test, integration-test, compile, package, install, verify, deploy)
+    #[command(name = "mvn")]
+    Mvn {
+        /// Maven goals and arguments (e.g., clean install, -DskipTests test, -X)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
     /// Show hook rewrite audit metrics (requires RTK_HOOK_AUDIT=1)
     #[command(name = "hook-audit")]
     HookAudit {
@@ -709,10 +773,23 @@ enum Commands {
 
 #[derive(Debug, Subcommand)]
 enum HookCommands {
+    /// Process Claude Code PreToolUse hook (reads JSON from stdin)
+    Claude,
+    /// Process Cursor Agent hook (reads JSON from stdin)
+    Cursor,
     /// Process Gemini CLI BeforeTool hook (reads JSON from stdin)
     Gemini,
     /// Process Copilot preToolUse hook (VS Code + Copilot CLI, reads JSON from stdin)
     Copilot,
+    /// Check how a command would be rewritten by the hook engine (dry-run)
+    Check {
+        /// Target agent
+        #[arg(long, default_value = "claude")]
+        agent: String,
+        /// Command to check
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -815,8 +892,6 @@ enum PnpmCommands {
     },
     /// Install packages (filter progress bars)
     Install {
-        /// Packages to install
-        packages: Vec<String>,
         /// Additional pnpm arguments
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -835,7 +910,10 @@ enum PnpmCommands {
 #[derive(Debug, Subcommand)]
 enum DockerCommands {
     /// List running containers
-    Ps,
+    Ps {
+        #[arg(short = 'a', long)]
+        all: bool,
+    },
     /// List images
     Images,
     /// Show container logs (deduplicated)
@@ -853,11 +931,17 @@ enum DockerCommands {
 #[derive(Debug, Subcommand)]
 enum ComposeCommands {
     /// List compose services (compact)
-    Ps,
+    Ps {
+        #[arg(short = 'a', long)]
+        all: bool,
+    },
     /// Show compose logs (deduplicated)
     Logs {
         /// Optional service name
         service: Option<String>,
+        /// Number of log lines to fetch
+        #[arg(long, default_value_t = 100)]
+        tail: u32,
     },
     /// Build compose services (summary)
     Build {
@@ -871,6 +955,12 @@ enum ComposeCommands {
 
 #[derive(Debug, Subcommand)]
 enum KubectlCommands {
+    /// Get Kubernetes resources (compact for pods/services)
+    Get {
+        /// kubectl get arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// List pods
     Pods {
         #[arg(short, long)]
@@ -894,6 +984,41 @@ enum KubectlCommands {
         container: Option<String>,
     },
     /// Passthrough: runs any unsupported kubectl subcommand directly
+    #[command(external_subcommand)]
+    Other(Vec<OsString>),
+}
+
+#[derive(Debug, Subcommand)]
+enum OcCommands {
+    /// Get OpenShift resources (compact for pods/services)
+    Get {
+        /// oc get arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// List pods
+    Pods {
+        #[arg(short, long)]
+        namespace: Option<String>,
+        /// All namespaces
+        #[arg(short = 'A', long)]
+        all: bool,
+    },
+    /// List services
+    Services {
+        #[arg(short, long)]
+        namespace: Option<String>,
+        /// All namespaces
+        #[arg(short = 'A', long)]
+        all: bool,
+    },
+    /// Show pod logs (deduplicated)
+    Logs {
+        pod: String,
+        #[arg(short, long)]
+        container: Option<String>,
+    },
+    /// Passthrough: runs any unsupported oc subcommand directly
     #[command(external_subcommand)]
     Other(Vec<OsString>),
 }
@@ -1041,6 +1166,7 @@ enum GoCommands {
 
 /// RTK-only subcommands that should never fall back to raw execution.
 /// If Clap fails to parse these, show the Clap error directly.
+/// When adding a new RTK-only subcommand to `Commands`, add its clap name here.
 const RTK_META_COMMANDS: &[&str] = &[
     "gain",
     "discover",
@@ -1048,13 +1174,20 @@ const RTK_META_COMMANDS: &[&str] = &[
     "init",
     "config",
     "proxy",
+    "run",
+    "hook",
     "hook-audit",
+    "pipe",
     "cc-economics",
     "verify",
     "trust",
     "untrust",
     "session",
     "rewrite",
+    "telemetry",
+    "smart",
+    "deps",
+    "json",
 ];
 
 fn run_fallback(parse_error: clap::Error) -> Result<i32> {
@@ -1227,6 +1360,26 @@ fn shell_split(input: &str) -> Vec<String> {
     discover::lexer::shell_split(input)
 }
 
+fn build_k8s_namespace_args(namespace: Option<String>, all: bool) -> Vec<String> {
+    let mut args = Vec::new();
+    if all {
+        args.push("-A".to_string());
+    } else if let Some(n) = namespace {
+        args.push("-n".to_string());
+        args.push(n);
+    }
+    args
+}
+
+fn build_k8s_logs_args(pod: String, container: Option<String>) -> Vec<String> {
+    let mut args = vec![pod];
+    if let Some(cont) = container {
+        args.push("-c".to_string());
+        args.push(cont);
+    }
+    args
+}
+
 /// Merge pnpm global filters args with other ones for standard String-based commands
 fn merge_pnpm_args(filters: &[String], args: &[String]) -> Vec<String> {
     filters
@@ -1269,6 +1422,17 @@ fn validate_pnpm_filters(filters: &[String], command: &PnpmCommands) -> Option<S
 }
 
 fn main() {
+    // Reset SIGPIPE to default handler so writing to a closed pipe
+    // e.g `rtk git log | head` exits silently instead of panicking.
+    // Rust ignores SIGPIPE by default and with panic="abort" in the
+    // release profile that becomes SIGABRT + coredump.
+    #[cfg(unix)]
+    #[allow(unsafe_code)]
+    // nosemgrep: unsafe-block
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let code = match run_cli() {
         Ok(code) => code,
         Err(e) => {
@@ -1277,6 +1441,28 @@ fn main() {
         }
     };
     std::process::exit(code);
+}
+
+fn uninstall_init_dispatch<UninstallHermes, UninstallStandard>(
+    agent: Option<AgentTarget>,
+    global: bool,
+    gemini: bool,
+    codex: bool,
+    ctx: hooks::init::InitContext,
+    uninstall_hermes: UninstallHermes,
+    uninstall_standard: UninstallStandard,
+) -> Result<()>
+where
+    UninstallHermes: FnOnce(hooks::init::InitContext) -> Result<()>,
+    UninstallStandard: FnOnce(bool, bool, bool, bool, bool, hooks::init::InitContext) -> Result<()>,
+{
+    if agent == Some(AgentTarget::Hermes) {
+        uninstall_hermes(ctx)
+    } else {
+        let cursor = agent == Some(AgentTarget::Cursor);
+        let pi = agent == Some(AgentTarget::Pi);
+        uninstall_standard(global, gemini, codex, cursor, pi, ctx)
+    }
 }
 
 fn run_cli() -> Result<i32> {
@@ -1487,6 +1673,25 @@ fn run_cli() -> Result<i32> {
             gh_cmd::run(&subcommand, &args, cli.verbose, cli.ultra_compact)?
         }
 
+        Commands::Glab {
+            repo,
+            group,
+            subcommand,
+            mut args,
+        } => {
+            // Append -R / -g flags at end so they don't interfere with
+            // subcommand dispatch (args[0] must be the sub-subcommand like "list")
+            if let Some(r) = repo {
+                args.push("-R".to_string());
+                args.push(r);
+            }
+            if let Some(g) = group {
+                args.push("-g".to_string());
+                args.push(g);
+            }
+            glab_cmd::run(&subcommand, &args, cli.verbose, cli.ultra_compact)?
+        }
+
         Commands::Aws { subcommand, args } => aws_cmd::run(&subcommand, &args, cli.verbose)?,
 
         Commands::Psql { args } => psql_cmd::run(&args, cli.verbose)?,
@@ -1508,8 +1713,8 @@ fn run_cli() -> Result<i32> {
                     &merge_pnpm_args(&filter, &args),
                     cli.verbose,
                 )?,
-                PnpmCommands::Install { packages, args } => pnpm_cmd::run(
-                    pnpm_cmd::PnpmCommand::Install { packages },
+                PnpmCommands::Install { args } => pnpm_cmd::run(
+                    pnpm_cmd::PnpmCommand::Install,
                     &merge_pnpm_args(&filter, &args),
                     cli.verbose,
                 )?,
@@ -1560,11 +1765,11 @@ fn run_cli() -> Result<i32> {
 
         Commands::Diff { file1, file2 } => {
             if let Some(f2) = file2 {
-                diff_cmd::run(&file1, &f2, cli.verbose)?;
+                diff_cmd::run(&file1, &f2, cli.verbose)?
             } else {
                 diff_cmd::run_stdin(cli.verbose)?;
+                0
             }
-            0
         }
 
         Commands::Log { file } => {
@@ -1585,8 +1790,13 @@ fn run_cli() -> Result<i32> {
         },
 
         Commands::Docker { command } => match command {
-            DockerCommands::Ps => {
-                container::run(container::ContainerCmd::DockerPs, &[], cli.verbose)?
+            DockerCommands::Ps { all } => {
+                let cmd = if all {
+                    container::ContainerCmd::DockerPsAll
+                } else {
+                    container::ContainerCmd::DockerPs
+                };
+                container::run(cmd, &[], cli.verbose)?
             }
             DockerCommands::Images => {
                 container::run(container::ContainerCmd::DockerImages, &[], cli.verbose)?
@@ -1595,9 +1805,9 @@ fn run_cli() -> Result<i32> {
                 container::run(container::ContainerCmd::DockerLogs, &[c], cli.verbose)?
             }
             DockerCommands::Compose { command: compose } => match compose {
-                ComposeCommands::Ps => container::run_compose_ps(cli.verbose)?,
-                ComposeCommands::Logs { service } => {
-                    container::run_compose_logs(service.as_deref(), cli.verbose)?
+                ComposeCommands::Ps { all } => container::run_compose_ps(all, cli.verbose)?,
+                ComposeCommands::Logs { service, tail } => {
+                    container::run_compose_logs(service.as_deref(), tail, cli.verbose)?
                 }
                 ComposeCommands::Build { service } => {
                     container::run_compose_build(service.as_deref(), cli.verbose)?
@@ -1610,35 +1820,37 @@ fn run_cli() -> Result<i32> {
         },
 
         Commands::Kubectl { command } => match command {
+            KubectlCommands::Get { args } => container::run_kubectl_get(&args, cli.verbose)?,
             KubectlCommands::Pods { namespace, all } => {
-                let mut args: Vec<String> = Vec::new();
-                if all {
-                    args.push("-A".to_string());
-                } else if let Some(n) = namespace {
-                    args.push("-n".to_string());
-                    args.push(n);
-                }
+                let args = build_k8s_namespace_args(namespace, all);
                 container::run(container::ContainerCmd::KubectlPods, &args, cli.verbose)?
             }
             KubectlCommands::Services { namespace, all } => {
-                let mut args: Vec<String> = Vec::new();
-                if all {
-                    args.push("-A".to_string());
-                } else if let Some(n) = namespace {
-                    args.push("-n".to_string());
-                    args.push(n);
-                }
+                let args = build_k8s_namespace_args(namespace, all);
                 container::run(container::ContainerCmd::KubectlServices, &args, cli.verbose)?
             }
             KubectlCommands::Logs { pod, container: c } => {
-                let mut args = vec![pod];
-                if let Some(cont) = c {
-                    args.push("-c".to_string());
-                    args.push(cont);
-                }
+                let args = build_k8s_logs_args(pod, c);
                 container::run(container::ContainerCmd::KubectlLogs, &args, cli.verbose)?
             }
             KubectlCommands::Other(args) => container::run_kubectl_passthrough(&args, cli.verbose)?,
+        },
+
+        Commands::Oc { command } => match command {
+            OcCommands::Get { args } => container::run_oc_get(&args, cli.verbose)?,
+            OcCommands::Pods { namespace, all } => {
+                let args = build_k8s_namespace_args(namespace, all);
+                container::k8s_pods("oc", &args, cli.verbose)?
+            }
+            OcCommands::Services { namespace, all } => {
+                let args = build_k8s_namespace_args(namespace, all);
+                container::k8s_services("oc", &args, cli.verbose)?
+            }
+            OcCommands::Logs { pod, container: c } => {
+                let args = build_k8s_logs_args(pod, c);
+                container::k8s_logs("oc", &args, cli.verbose)?
+            }
+            OcCommands::Other(args) => container::run_oc_passthrough(&args, cli.verbose)?,
         },
 
         Commands::Summary { command } => {
@@ -1647,17 +1859,12 @@ fn run_cli() -> Result<i32> {
         }
 
         Commands::Grep {
-            pattern,
-            path,
             max_len,
             max,
             context_only,
             file_type,
-            line_numbers: _, // no-op: line numbers always enabled in grep_cmd::run
             extra_args,
         } => grep_cmd::run(
-            &pattern,
-            &path,
             max_len,
             max,
             context_only,
@@ -1679,12 +1886,30 @@ fn run_cli() -> Result<i32> {
             uninstall,
             codex,
             copilot,
+            dry_run,
         } => {
+            let ctx = hooks::init::InitContext {
+                verbose: cli.verbose,
+                dry_run,
+            };
             if show {
                 hooks::init::show_config(codex)?;
+            } else if uninstall && copilot {
+                if global {
+                    hooks::init::uninstall_copilot_global(ctx)?;
+                } else {
+                    hooks::init::uninstall_copilot(ctx)?;
+                }
             } else if uninstall {
-                let cursor = agent == Some(AgentTarget::Cursor);
-                hooks::init::uninstall(global, gemini, codex, cursor, cli.verbose)?;
+                uninstall_init_dispatch(
+                    agent,
+                    global,
+                    gemini,
+                    codex,
+                    ctx,
+                    hooks::init::uninstall_hermes,
+                    hooks::init::uninstall,
+                )?;
             } else if gemini {
                 let patch_mode = if auto_patch {
                     hooks::init::PatchMode::Auto
@@ -1693,21 +1918,29 @@ fn run_cli() -> Result<i32> {
                 } else {
                     hooks::init::PatchMode::Ask
                 };
-                hooks::init::run_gemini(global, hook_only, patch_mode, cli.verbose)?;
+                hooks::init::run_gemini(global, hook_only, patch_mode, ctx)?;
             } else if copilot {
-                hooks::init::run_copilot(cli.verbose)?;
+                if global {
+                    hooks::init::run_copilot_global(ctx)?;
+                } else {
+                    hooks::init::run_copilot(ctx)?;
+                }
+            } else if agent == Some(AgentTarget::Pi) {
+                hooks::init::run_pi_mode(global, ctx)?
             } else if agent == Some(AgentTarget::Kilocode) {
                 if global {
                     anyhow::bail!("Kilo Code is project-scoped. Use: rtk init --agent kilocode");
                 }
-                hooks::init::run_kilocode_mode(cli.verbose)?;
+                hooks::init::run_kilocode_mode(ctx)?;
             } else if agent == Some(AgentTarget::Antigravity) {
                 if global {
                     anyhow::bail!(
                         "Antigravity is project-scoped. Use: rtk init --agent antigravity"
                     );
                 }
-                hooks::init::run_antigravity_mode(cli.verbose)?;
+                hooks::init::run_antigravity_mode(ctx)?;
+            } else if agent == Some(AgentTarget::Hermes) {
+                hooks::init::run_hermes_mode(ctx)?;
             } else {
                 let install_opencode = opencode;
                 let install_claude = !opencode;
@@ -1733,7 +1966,7 @@ fn run_cli() -> Result<i32> {
                     hook_only,
                     codex,
                     patch_mode,
-                    cli.verbose,
+                    ctx,
                 )?;
             }
             0
@@ -1768,6 +2001,8 @@ fn run_cli() -> Result<i32> {
             all,
             format,
             failures,
+            reset,
+            yes,
         } => {
             analytics::gain::run(
                 project, // added: pass project flag
@@ -1781,6 +2016,8 @@ fn run_cli() -> Result<i32> {
                 all,
                 &format,
                 failures,
+                reset,
+                yes,
                 cli.verbose,
             )?;
             0
@@ -1976,10 +2213,7 @@ fn run_cli() -> Result<i32> {
                 "next" => next_cmd::run(&args[1..], cli.verbose)?,
                 "prettier" => prettier_cmd::run(&args[1..], cli.verbose)?,
                 "playwright" => playwright_cmd::run(&args[1..], cli.verbose)?,
-                _ => {
-                    // Generic passthrough with npm boilerplate filter
-                    npm_cmd::run(&args, cli.verbose, cli.skip_env)?
-                }
+                _ => npm_cmd::exec(&args, cli.verbose, cli.skip_env)?,
             }
         }
 
@@ -2016,23 +2250,84 @@ fn run_cli() -> Result<i32> {
 
         Commands::GolangciLint { args } => golangci_cmd::run(&args, cli.verbose)?,
 
+        Commands::Gradlew { args } => gradlew_cmd::run(&args, cli.verbose)?,
+
+        Commands::Mvn { args } => mvn_cmd::run(&args, cli.verbose)?,
+
         Commands::HookAudit { since } => {
             hooks::hook_audit_cmd::run(since, cli.verbose)?;
             0
         }
 
-        Commands::Hook { command } => {
-            match command {
-                HookCommands::Gemini => hooks::hook_cmd::run_gemini()?,
-                HookCommands::Copilot => hooks::hook_cmd::run_copilot()?,
+        Commands::Hook { command } => match command {
+            HookCommands::Claude => {
+                hooks::hook_cmd::run_claude()?;
+                0
             }
-            0
-        }
+            HookCommands::Cursor => {
+                hooks::hook_cmd::run_cursor()?;
+                0
+            }
+            HookCommands::Gemini => {
+                hooks::hook_cmd::run_gemini()?;
+                0
+            }
+            HookCommands::Copilot => {
+                hooks::hook_cmd::run_copilot()?;
+                0
+            }
+            HookCommands::Check { agent: _, command } => {
+                use crate::discover::registry::rewrite_command;
+                let raw = command.join(" ");
+                let (excluded, transparent_prefixes) = crate::core::config::Config::load()
+                    .map(|c| (c.hooks.exclude_commands, c.hooks.transparent_prefixes))
+                    .unwrap_or_default();
+                match rewrite_command(&raw, &excluded, &transparent_prefixes) {
+                    Some(rewritten) => {
+                        println!("{}", rewritten);
+                        0
+                    }
+                    None => {
+                        eprintln!("No rewrite for: {}", raw);
+                        1
+                    }
+                }
+            }
+        },
 
         Commands::Rewrite { args } => {
             let cmd = args.join(" ");
             hooks::rewrite_cmd::run(&cmd)?;
             0
+        }
+
+        Commands::Pipe {
+            filter,
+            passthrough,
+        } => {
+            pipe_cmd::run(filter.as_deref(), passthrough)?;
+            0
+        }
+
+        Commands::Run { command, args } => {
+            let raw = match command {
+                Some(c) => c,
+                None if !args.is_empty() => args.join(" "),
+                None => String::new(),
+            };
+            if raw.trim().is_empty() {
+                0
+            } else {
+                use std::process::Command as ProcCommand;
+                let shell = if cfg!(windows) { "cmd" } else { "sh" };
+                let flag = if cfg!(windows) { "/C" } else { "-c" };
+                let status = ProcCommand::new(shell)
+                    .arg(flag)
+                    .arg(&raw)
+                    .status()
+                    .with_context(|| format!("Failed to execute: {}", raw))?;
+                status.code().unwrap_or(1)
+            }
         }
 
         Commands::Proxy { args } => {
@@ -2081,6 +2376,7 @@ fn run_cli() -> Result<i32> {
             static PROXY_CHILD_PID: AtomicU32 = AtomicU32::new(0);
 
             #[cfg(unix)]
+            #[allow(unsafe_code)]
             {
                 unsafe extern "C" fn handle_signal(sig: libc::c_int) {
                     let pid = PROXY_CHILD_PID.load(Ordering::SeqCst);
@@ -2088,13 +2384,19 @@ fn run_cli() -> Result<i32> {
                         libc::kill(pid as libc::pid_t, libc::SIGTERM);
                         libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), 0);
                     }
-                    // Re-raise with default handler so parent sees correct exit status
                     libc::signal(sig, libc::SIG_DFL);
                     libc::raise(sig);
                 }
+                // nosemgrep: unsafe-block
                 unsafe {
-                    libc::signal(libc::SIGINT, handle_signal as libc::sighandler_t);
-                    libc::signal(libc::SIGTERM, handle_signal as libc::sighandler_t);
+                    libc::signal(
+                        libc::SIGINT,
+                        handle_signal as *const () as libc::sighandler_t,
+                    );
+                    libc::signal(
+                        libc::SIGTERM,
+                        handle_signal as *const () as libc::sighandler_t,
+                    );
                 }
             }
 
@@ -2256,6 +2558,7 @@ fn is_operational_command(cmd: &Commands) -> bool {
             | Commands::Smart { .. }
             | Commands::Git { .. }
             | Commands::Gh { .. }
+            | Commands::Glab { .. }
             | Commands::Pnpm { .. }
             | Commands::Err { .. }
             | Commands::Test { .. }
@@ -2268,6 +2571,7 @@ fn is_operational_command(cmd: &Commands) -> bool {
             | Commands::Dotnet { .. }
             | Commands::Docker { .. }
             | Commands::Kubectl { .. }
+            | Commands::Oc { .. }
             | Commands::Summary { .. }
             | Commands::Grep { .. }
             | Commands::Wget { .. }
@@ -2298,6 +2602,7 @@ fn is_operational_command(cmd: &Commands) -> bool {
 mod tests {
     use super::*;
     use clap::Parser;
+    use std::cell::Cell;
 
     #[test]
     fn test_git_commit_single_message() {
@@ -2433,6 +2738,99 @@ mod tests {
     }
 
     #[test]
+    fn test_try_parse_init_agent_hermes() {
+        let cli = Cli::try_parse_from(["rtk", "init", "--agent", "hermes"]).unwrap();
+        match cli.command {
+            Commands::Init { agent, .. } => {
+                assert_eq!(agent, Some(AgentTarget::Hermes));
+            }
+            _ => panic!("Expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_try_parse_kubectl_get_alias() {
+        let cli = Cli::try_parse_from(["rtk", "kubectl", "get", "pods", "-n", "default"]).unwrap();
+
+        match cli.command {
+            Commands::Kubectl {
+                command: KubectlCommands::Get { args },
+            } => assert_eq!(args, vec!["pods", "-n", "default"]),
+            _ => panic!("Expected Kubectl Get command"),
+        }
+    }
+
+    #[test]
+    fn test_try_parse_oc_get() {
+        let cli = Cli::try_parse_from(["rtk", "oc", "get", "pods", "-n", "default"]).unwrap();
+
+        match cli.command {
+            Commands::Oc {
+                command: OcCommands::Get { args },
+            } => assert_eq!(args, vec!["pods", "-n", "default"]),
+            _ => panic!("Expected Oc Get command"),
+        }
+    }
+
+    #[test]
+    fn test_try_parse_oc_other() {
+        let cli = Cli::try_parse_from(["rtk", "oc", "new-project", "test"]).unwrap();
+
+        match cli.command {
+            Commands::Oc {
+                command: OcCommands::Other(_),
+            } => {}
+            _ => panic!("Expected Oc Other command"),
+        }
+    }
+
+    #[test]
+    fn test_try_parse_init_agent_hermes_uninstall() {
+        let cli = Cli::try_parse_from(["rtk", "init", "--agent", "hermes", "--uninstall"]).unwrap();
+        match cli.command {
+            Commands::Init {
+                agent, uninstall, ..
+            } => {
+                assert_eq!(agent, Some(AgentTarget::Hermes));
+                assert!(uninstall);
+            }
+            _ => panic!("Expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_init_uninstall_dispatch_routes_hermes_to_hermes_cleanup() {
+        let hermes_called = Cell::new(false);
+        let standard_called = Cell::new(false);
+        let ctx = hooks::init::InitContext {
+            verbose: 2,
+            dry_run: true,
+        };
+
+        let result = uninstall_init_dispatch(
+            Some(AgentTarget::Hermes),
+            true,
+            false,
+            false,
+            ctx,
+            |ctx| {
+                hermes_called.set(true);
+                assert_eq!(ctx.verbose, 2);
+                assert!(ctx.dry_run);
+                Ok(())
+            },
+            |_, _, _, _, _, _| {
+                standard_called.set(true);
+                Ok(())
+            },
+        );
+
+        assert!(result.is_ok());
+        assert!(hermes_called.get());
+        assert!(!standard_called.get());
+    }
+
+    #[test]
     fn test_try_parse_help_is_display_help() {
         match Cli::try_parse_from(["rtk", "--help"]) {
             Err(e) => assert_eq!(e.kind(), ErrorKind::DisplayHelp),
@@ -2505,7 +2903,7 @@ mod tests {
         // RTK meta-commands should produce parse errors (not fall through to raw execution).
         // Skip "proxy" because it uses trailing_var_arg (accepts any args by design).
         for cmd in RTK_META_COMMANDS {
-            if matches!(*cmd, "proxy" | "rewrite" | "session") {
+            if matches!(*cmd, "proxy" | "run" | "rewrite" | "session") {
                 continue; // these use trailing_var_arg (accept any args by design)
             }
             let result = Cli::try_parse_from(["rtk", cmd, "--nonexistent-flag-xyz"]);
@@ -2514,6 +2912,169 @@ mod tests {
                 "Meta-command '{}' with bad flag should fail to parse",
                 cmd
             );
+        }
+    }
+
+    /// Every subcommand must be in `RTK_META_COMMANDS` (fail closed) or
+    /// `PASSTHROUGH` (falls through to the real binary). Fails for any new
+    /// command until it's classified.
+    #[test]
+    fn test_every_subcommand_is_classified() {
+        use clap::CommandFactory;
+
+        const PASSTHROUGH: &[&str] = &[
+            "ls",
+            "tree",
+            "read",
+            "git",
+            "gh",
+            "glab",
+            "aws",
+            "psql",
+            "pnpm",
+            "err",
+            "test",
+            "env",
+            "find",
+            "diff",
+            "log",
+            "dotnet",
+            "docker",
+            "kubectl",
+            "oc",
+            "summary",
+            "grep",
+            "wget",
+            "wc",
+            "jest",
+            "vitest",
+            "prisma",
+            "tsc",
+            "next",
+            "lint",
+            "prettier",
+            "format",
+            "playwright",
+            "cargo",
+            "npm",
+            "npx",
+            "curl",
+            "ruff",
+            "pytest",
+            "mypy",
+            "rake",
+            "rubocop",
+            "rspec",
+            "pip",
+            "go",
+            "gt",
+            "golangci-lint",
+            "gradlew",
+            "mvn",
+        ];
+
+        let unclassified: Vec<String> = Cli::command()
+            .get_subcommands()
+            .map(|c| c.get_name().to_string())
+            .filter(|name| {
+                !RTK_META_COMMANDS.contains(&name.as_str()) && !PASSTHROUGH.contains(&name.as_str())
+            })
+            .collect();
+
+        assert!(
+            unclassified.is_empty(),
+            "unclassified subcommand(s) {:?}: add to RTK_META_COMMANDS (no system \
+             binary) or PASSTHROUGH (wraps a real tool)",
+            unclassified
+        );
+    }
+
+    #[test]
+    fn test_run_command_with_dash_c() {
+        let cli = Cli::try_parse_from(["rtk", "run", "-c", "git status && echo done"]).unwrap();
+        match cli.command {
+            Commands::Run { command, args } => {
+                assert_eq!(command, Some("git status && echo done".to_string()));
+                assert!(args.is_empty());
+            }
+            _ => panic!("Expected Run command"),
+        }
+    }
+
+    #[test]
+    fn test_run_command_positional_args() {
+        let cli = Cli::try_parse_from(["rtk", "run", "echo", "hello"]).unwrap();
+        match cli.command {
+            Commands::Run { command, args } => {
+                assert!(command.is_none());
+                assert_eq!(args, vec!["echo", "hello"]);
+            }
+            _ => panic!("Expected Run command"),
+        }
+    }
+
+    #[test]
+    fn test_hook_claude_parses() {
+        let cli = Cli::try_parse_from(["rtk", "hook", "claude"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Hook {
+                command: HookCommands::Claude
+            }
+        ));
+    }
+
+    #[test]
+    fn test_hook_check_parses() {
+        let cli = Cli::try_parse_from(["rtk", "hook", "check", "git", "status"]).unwrap();
+        match cli.command {
+            Commands::Hook {
+                command: HookCommands::Check { agent, command },
+            } => {
+                assert_eq!(agent, "claude");
+                assert_eq!(command, vec!["git", "status"]);
+            }
+            _ => panic!("Expected Hook Check command"),
+        }
+    }
+
+    #[test]
+    fn test_hook_check_with_agent() {
+        let cli =
+            Cli::try_parse_from(["rtk", "hook", "check", "--agent", "gemini", "cargo", "test"])
+                .unwrap();
+        match cli.command {
+            Commands::Hook {
+                command: HookCommands::Check { agent, command },
+            } => {
+                assert_eq!(agent, "gemini");
+                assert_eq!(command, vec!["cargo", "test"]);
+            }
+            _ => panic!("Expected Hook Check command"),
+        }
+    }
+
+    #[test]
+    fn test_hook_check_preserves_double_dash_in_command() {
+        let cli = Cli::try_parse_from([
+            "rtk",
+            "hook",
+            "check",
+            "shadowenv",
+            "exec",
+            "--",
+            "git",
+            "status",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Hook {
+                command: HookCommands::Check { agent, command },
+            } => {
+                assert_eq!(agent, "claude");
+                assert_eq!(command, vec!["shadowenv", "exec", "--", "git", "status"]);
+            }
+            _ => panic!("Expected Hook Check command"),
         }
     }
 
@@ -2527,6 +3088,7 @@ mod tests {
             vec!["rtk", "init"],
             vec!["rtk", "config"],
             vec!["rtk", "proxy", "echo", "hi"],
+            vec!["rtk", "run", "-c", "echo hi"],
             vec!["rtk", "hook-audit"],
             vec!["rtk", "cc-economics"],
         ];
@@ -2776,11 +3338,101 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Integration test: requires `cargo build` first
+    fn test_broken_pipe_does_not_crash() {
+        let bin_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("debug")
+            .join("rtk");
+        assert!(
+            bin_path.exists(),
+            "Debug binary not found at {:?} - run `cargo build` first",
+            bin_path
+        );
+
+        let mut child = std::process::Command::new(&bin_path)
+            .args(["git", "log", "--oneline", "-50"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn rtk");
+
+        // Read one byte then drop stdout to close the pipe.
+        let mut stdout = child.stdout.take().unwrap();
+        let mut buf = [0u8; 1];
+        let _ = std::io::Read::read(&mut stdout, &mut buf);
+
+        let status = child.wait().expect("Failed to wait for rtk");
+        let code = status.code().unwrap_or(-1);
+
+        assert_ne!(
+            code, 134,
+            "rtk crashed with SIGABRT (exit 134) on broken pipe - SIGPIPE handler missing"
+        );
+    }
+
+    #[test]
     fn test_ultra_compact_long_form_still_works() {
         let cli = Cli::try_parse_from(["rtk", "--ultra-compact", "git", "status"]).unwrap();
         assert!(
             cli.ultra_compact,
             "--ultra-compact long form must still enable ultra-compact mode"
         );
+    }
+
+    #[test]
+    fn test_npx_unknown_tool_passthrough() {
+        // The bug (rtk-ai/rtk#815) was that unknown tools under `rtk npx`
+        // were dispatched to `npm` instead of `npx`. At the parse level, the
+        // Npx variant must carry all args through unchanged so the dispatch
+        // arm can forward them to npx.
+        let cli = Cli::try_parse_from(["rtk", "npx", "cowsay", "hello"]).unwrap();
+        match cli.command {
+            Commands::Npx { args } => {
+                assert_eq!(args, vec!["cowsay", "hello"]);
+            }
+            _ => panic!("Expected Commands::Npx for unknown tool"),
+        }
+    }
+
+    #[test]
+    fn test_init_pi_flag_rejected() {
+        // --pi has been removed; --agent pi is the canonical form
+        let result = Cli::try_parse_from(["rtk", "init", "--pi"]);
+        assert!(result.is_err(), "--pi must be rejected as unknown argument");
+    }
+
+    #[test]
+    fn test_init_agent_pi_parses() {
+        let cli = Cli::try_parse_from(["rtk", "init", "--agent", "pi"]).unwrap();
+        match cli.command {
+            Commands::Init { agent, .. } => {
+                assert_eq!(
+                    agent,
+                    Some(AgentTarget::Pi),
+                    "--agent pi must set Pi variant"
+                );
+            }
+            _ => panic!("Expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_init_uninstall_agent_pi_parses() {
+        let cli = Cli::try_parse_from(["rtk", "init", "--uninstall", "--agent", "pi", "--global"])
+            .unwrap();
+        match cli.command {
+            Commands::Init {
+                uninstall,
+                agent,
+                global,
+                ..
+            } => {
+                assert!(uninstall);
+                assert_eq!(agent, Some(AgentTarget::Pi));
+                assert!(global);
+            }
+            _ => panic!("Expected Init command"),
+        }
     }
 }
