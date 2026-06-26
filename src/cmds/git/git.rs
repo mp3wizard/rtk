@@ -1714,9 +1714,6 @@ fn run_worktree(args: &[String], verbose: u8, global_args: &[String]) -> Result<
     cmd.args(["worktree", "list"]);
     let result = exec_capture(&mut cmd).context("Failed to run git worktree list")?;
 
-    // A failed `git worktree list` (e.g. run outside a repo) must propagate, not
-    // be flattened to empty output + exit 0. The has_action branch above already
-    // guards on success (#2497).
     if !result.success() {
         eprintln!("FAILED: git worktree list");
         if !result.stderr.trim().is_empty() {
