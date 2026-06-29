@@ -2331,7 +2331,7 @@ fn run_cli() -> Result<i32> {
                     .arg(&raw)
                     .status()
                     .with_context(|| format!("Failed to execute: {}", raw))?;
-                status.code().unwrap_or(1)
+                core::utils::exit_code_from_status(&status, "run")
             }
         }
 
