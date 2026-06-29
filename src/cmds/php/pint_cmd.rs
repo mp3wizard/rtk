@@ -27,7 +27,9 @@ struct PintFile {
     // Aliases keep both schemas parsing so output stays compressed across versions.
     #[serde(alias = "path")]
     name: String,
-    #[serde(rename = "appliedFixers", alias = "fixers")]
+    // PHP-CS-Fixer omits the fixers key entirely in dry-run/diff modes, so it
+    // must default rather than fail the whole parse.
+    #[serde(rename = "appliedFixers", alias = "fixers", default)]
     applied_fixers: Vec<String>,
 }
 
@@ -205,6 +207,16 @@ mod tests {
         assert!(result.contains("  - e\n"), "got: {}", result);
         assert!(!result.contains("  - f\n"), "got: {}", result);
         assert!(result.contains("+2 more rules"), "got: {}", result);
+    }
+
+    #[test]
+    fn test_pint_file_without_fixers_key() {
+        // PHP-CS-Fixer omits applied_fixers when there's nothing to report;
+        // the entry must still parse rather than fall back to raw output.
+        let json = r#"{"files":[{"name":"x.php"}]}"#;
+        let result = filter_pint_json(json);
+        assert!(result.contains("0 changes in 1 files"), "got: {}", result);
+        assert!(result.contains("x.php (0)"), "got: {}", result);
     }
 
     #[test]
