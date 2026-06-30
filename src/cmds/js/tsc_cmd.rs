@@ -9,9 +9,8 @@ use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
 lazy_static! {
-    static ref TSC_ERROR: Regex = Regex::new(
-        r"^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$"
-    ).unwrap();
+    static ref TSC_ERROR: Regex =
+        Regex::new(r"^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$").unwrap();
 }
 
 pub fn run(args: &[String], verbose: u8) -> Result<i32> {
@@ -85,7 +84,7 @@ impl BlockHandler for TscHandler {
         }
 
         let mut result = format!(
-            "═══════════════════════════════════════\nTypeScript: {} errors in {} files\n",
+            "TypeScript: {} errors in {} files\n",
             self.error_count,
             self.files.len()
         );
@@ -106,7 +105,6 @@ impl BlockHandler for TscHandler {
 }
 
 pub(crate) fn filter_tsc_output(output: &str) -> String {
-
     struct TsError {
         file: String,
         line: usize,
@@ -176,7 +174,6 @@ pub(crate) fn filter_tsc_output(output: &str) -> String {
         errors.len(),
         by_file.len()
     ));
-    result.push_str("═══════════════════════════════════════\n");
 
     // Top error codes summary (compact, one line)
     let mut code_counts: Vec<_> = by_code.iter().collect();
@@ -193,7 +190,7 @@ pub(crate) fn filter_tsc_output(output: &str) -> String {
 
     // Files sorted by error count (most errors first)
     let mut files_sorted: Vec<_> = by_file.iter().collect();
-    files_sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    files_sorted.sort_by_key(|b| std::cmp::Reverse(b.1.len()));
 
     // Show every error per file — no limits
     for (file, file_errors) in &files_sorted {
