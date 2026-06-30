@@ -1945,13 +1945,12 @@ fn run_cli() -> Result<i32> {
                         "Antigravity is project-scoped. Use: rtk init --agent antigravity"
                     );
                 }
-                hooks::init::run_antigravity_mode(cli.verbose)?;
+                hooks::init::run_antigravity_mode(ctx)?;
             } else if agent == Some(AgentTarget::Kimi) {
                 if global {
                     anyhow::bail!("Kimi AI is project-scoped. Use: rtk init --agent kimi");
                 }
-                hooks::init::run_kimi_mode(cli.verbose)?;
-                hooks::init::run_antigravity_mode(ctx)?;
+                hooks::init::run_kimi_mode(ctx)?;
             } else if agent == Some(AgentTarget::Hermes) {
                 hooks::init::run_hermes_mode(ctx)?;
             } else {

@@ -1845,45 +1845,40 @@ pub fn uninstall_hermes(ctx: InitContext) -> Result<()> {
 }
 
 // ─── Kimi AI support ──────────────────────────────────────────
+//
+// Kimi Code CLI has NO `.kimirules` convention — that file is never read.
+// It loads project-level instructions from `AGENTS.md` in the project root
+// (docs: kimi.com/help/kimi-code/cli-customization). Its PreToolUse hooks are
+// gate-only (allow/deny + feedback string) and cannot rewrite a command, so
+// `git status` -> `rtk git status` is impossible via a hook. We therefore
+// inject an RTK instructions block into AGENTS.md — same mechanism as Codex.
 
-const KIMI_RULES: &str = include_str!("../../hooks/kimi/rules.md");
-
-pub fn run_kimi_mode(verbose: u8) -> Result<()> {
-    run_kimi_mode_at(&std::env::current_dir()?, verbose)
+pub fn run_kimi_mode(ctx: InitContext) -> Result<()> {
+    run_kimi_mode_at(&std::env::current_dir()?, ctx)
 }
 
-fn run_kimi_mode_at(base_dir: &Path, verbose: u8) -> Result<()> {
-    // Kimi AI reads .kimirules from the project root (workspace-scoped)
-    let rules_path = base_dir.join(".kimirules");
+fn run_kimi_mode_at(base_dir: &Path, ctx: InitContext) -> Result<()> {
+    // Kimi reads AGENTS.md from the project root (workspace-scoped).
+    let agents_md_path = base_dir.join(AGENTS_MD);
 
-    let existing = fs::read_to_string(&rules_path).unwrap_or_default();
-    if existing.contains("RTK") || existing.contains("rtk") {
-        println!("\nRTK already configured for Kimi AI in this project.\n");
-        println!("  Rules: .kimirules (already present)");
-    } else {
-        let new_content = if existing.trim().is_empty() {
-            KIMI_RULES.to_string()
-        } else {
-            format!("{}\n\n{}", existing.trim(), KIMI_RULES)
-        };
-        fs::write(&rules_path, &new_content)
-            .context("Failed to write .kimirules")?;
+    write_rtk_block(
+        &agents_md_path,
+        RTK_INSTRUCTIONS,
+        "RTK instructions",
+        "rtk init --agent kimi",
+        ctx,
+    )?;
 
-        if verbose > 0 {
-            eprintln!("Wrote .kimirules");
-        }
-
+    if !ctx.dry_run {
         println!("\nRTK configured for Kimi AI.\n");
-        println!("  Rules: .kimirules (installed)");
+        println!("  AGENTS.md: {}", agents_md_path.display());
+        println!("  Kimi AI will now use rtk commands for token savings.");
+        println!("  Test with: git status\n");
     }
-    println!("  Kimi AI will now use rtk commands for token savings.");
-    println!("  Test with: git status\n");
 
     Ok(())
 }
 
-fn run_codex_mode(global: bool, verbose: u8) -> Result<()> {
-=======
 fn uninstall_hermes_at(hermes_home: &Path, ctx: InitContext) -> Result<Vec<String>> {
     let InitContext { verbose, dry_run } = ctx;
     let mut removed = Vec::new();
@@ -4508,26 +4503,34 @@ mod tests {
     }
 
     #[test]
-    fn test_kimi_mode_creates_rules_file() {
+    fn test_kimi_mode_writes_agents_md() {
         let temp = TempDir::new().unwrap();
-        run_kimi_mode_at(temp.path(), 0).unwrap();
+        run_kimi_mode_at(temp.path(), InitContext::default()).unwrap();
 
-        let rules_path = temp.path().join(".kimirules");
-        assert!(rules_path.exists(), "Rules file should be created");
-        let content = fs::read_to_string(&rules_path).unwrap();
-        assert!(content.contains("RTK"), "Rules file should contain RTK");
+        // Kimi reads AGENTS.md, NOT .kimirules (which it does not support).
+        let agents_md = temp.path().join("AGENTS.md");
+        assert!(agents_md.exists(), "AGENTS.md should be created");
+        assert!(
+            !temp.path().join(".kimirules").exists(),
+            ".kimirules must not be created (unsupported by kimi-cli)"
+        );
+        let content = fs::read_to_string(&agents_md).unwrap();
+        assert!(
+            content.contains(RTK_BLOCK_START),
+            "AGENTS.md should contain the RTK instructions block"
+        );
     }
 
     #[test]
     fn test_kimi_mode_is_idempotent() {
         let temp = TempDir::new().unwrap();
-        run_kimi_mode_at(temp.path(), 0).unwrap();
+        run_kimi_mode_at(temp.path(), InitContext::default()).unwrap();
 
-        let path = temp.path().join(".kimirules");
+        let path = temp.path().join("AGENTS.md");
         let first = fs::read_to_string(&path).unwrap();
 
-        // Second run should not overwrite
-        run_kimi_mode_at(temp.path(), 0).unwrap();
+        // Second run is an upsert no-op.
+        run_kimi_mode_at(temp.path(), InitContext::default()).unwrap();
         let second = fs::read_to_string(&path).unwrap();
         assert_eq!(first, second, "Idempotent: content should not change");
     }
