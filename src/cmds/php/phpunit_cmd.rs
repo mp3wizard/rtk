@@ -5,7 +5,7 @@
 //! plus a bounded list of failures with their first two detail lines.
 //! Dot-progress lines and headers are stripped entirely.
 
-use super::utils::php_tool_command;
+use super::utils::{php_tool_command, strip_ansi_and_controls};
 use crate::core::runner;
 use anyhow::Result;
 use lazy_static::lazy_static;
@@ -41,6 +41,12 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
 }
 
 pub(crate) fn filter_phpunit_output(output: &str) -> String {
+    // PHPUnit colorizes its result line and progress with ANSI under
+    // `--colors=always`; without stripping, the "OK ("/"FAILURES!"/"Tests:"
+    // anchors below never match and real counts are lost.
+    let cleaned = strip_ansi_and_controls(output);
+    let output = cleaned.as_str();
+
     let mut failures: Vec<Vec<String>> = Vec::new();
     let mut current: Vec<String> = Vec::new();
     let mut in_failures = false;
@@ -88,9 +94,12 @@ pub(crate) fn filter_phpunit_output(output: &str) -> String {
     }
 
     if failures.is_empty() {
-        let (tests, assertions, _, _) = parse_counts(output);
-        if tests > 0 {
-            return format!("PHPUnit: {} tests, {} assertions", tests, assertions);
+        let counts = parse_counts(output);
+        if counts.tests > 0 {
+            return format!(
+                "PHPUnit: {} tests, {} assertions",
+                counts.tests, counts.assertions
+            );
         }
         return "PHPUnit: ok".to_string();
     }
@@ -103,24 +112,33 @@ fn is_numbered_failure_heading(line: &str) -> bool {
 }
 
 fn build_success_with_skipped(output: &str) -> String {
-    let (tests, assertions, _, skipped) = parse_counts(output);
-    if skipped > 0 {
+    let counts = parse_counts(output);
+    if counts.skipped > 0 {
         format!(
             "PHPUnit: {} tests, {} assertions, {} skipped",
-            tests, assertions, skipped
+            counts.tests, counts.assertions, counts.skipped
         )
     } else {
-        format!("PHPUnit: {} tests, {} assertions", tests, assertions)
+        format!(
+            "PHPUnit: {} tests, {} assertions",
+            counts.tests, counts.assertions
+        )
     }
 }
 
 fn build_phpunit_summary(output: &str, failures: &[Vec<String>]) -> String {
-    let (tests, assertions, failures_count, _skipped) = parse_counts(output);
+    let counts = parse_counts(output);
 
+    // PHPUnit separates failures (assertion mismatches) from errors (thrown
+    // exceptions); report them distinctly rather than lumping under "failures".
     let mut result = format!(
-        "PHPUnit: {} tests, {} assertions, {} failures\n",
-        tests, assertions, failures_count
+        "PHPUnit: {} tests, {} assertions, {} failures",
+        counts.tests, counts.assertions, counts.failures
     );
+    if counts.errors > 0 {
+        result.push_str(&format!(", {} errors", counts.errors));
+    }
+    result.push('\n');
 
     for failure_lines in failures.iter().take(MAX_FAILURES_SHOWN) {
         if let Some(first) = failure_lines.first() {
@@ -145,11 +163,8 @@ fn build_phpunit_summary(output: &str, failures: &[Vec<String>]) -> String {
     result.trim().to_string()
 }
 
-fn parse_counts(output: &str) -> (usize, usize, usize, usize) {
-    let mut tests = 0;
-    let mut assertions = 0;
-    let mut failures = 0;
-    let mut skipped = 0;
+fn parse_counts(output: &str) -> Counts {
+    let mut counts = Counts::default();
 
     for line in output.lines() {
         let trimmed = line.trim();
@@ -168,16 +183,26 @@ fn parse_counts(output: &str) -> (usize, usize, usize, usize) {
                 .unwrap_or(0);
 
             match key {
-                "Tests:" => tests = val,
-                "Assertions:" => assertions = val,
-                k if k.starts_with("Failures") || k.starts_with("Errors") => failures += val,
-                k if k.starts_with("Skipped") => skipped = val,
+                "Tests:" => counts.tests = val,
+                "Assertions:" => counts.assertions = val,
+                k if k.starts_with("Failures") => counts.failures += val,
+                k if k.starts_with("Errors") => counts.errors += val,
+                k if k.starts_with("Skipped") => counts.skipped = val,
                 _ => {}
             }
         }
     }
 
-    (tests, assertions, failures, skipped)
+    counts
+}
+
+#[derive(Default)]
+struct Counts {
+    tests: usize,
+    assertions: usize,
+    failures: usize,
+    errors: usize,
+    skipped: usize,
 }
 
 #[cfg(test)]
@@ -311,7 +336,8 @@ ERRORS!
 Tests: 1, Assertions: 0, Errors: 1."#;
         let result = filter_phpunit_output(output);
         assert!(result.contains("FooTest::testBar"), "got: {}", result);
-        assert!(result.contains("1 failures"), "got: {}", result);
+        // Errors are now reported distinctly from failures.
+        assert!(result.contains("0 failures, 1 errors"), "got: {}", result);
     }
 
     #[test]
@@ -330,6 +356,18 @@ Tests: 1, Assertions: 0, Errors: 1."#;
         assert!(result.contains("Suite::test10"), "got: {}", result);
         assert!(!result.contains("Suite::test11"), "got: {}", result);
         assert!(result.contains("+5 more failures"), "got: {}", result);
+    }
+
+    #[test]
+    fn test_phpunit_strips_ansi_colors() {
+        // --colors=always wraps the result line; anchors must still match.
+        let colored = "\x1b[30;42mOK\x1b[0m \x1b[32m(9 tests, 20 assertions)\x1b[0m";
+        let result = filter_phpunit_output(colored);
+        assert!(
+            result.contains("OK (9 tests, 20 assertions)"),
+            "got: {}",
+            result
+        );
     }
 
     #[test]
