@@ -179,12 +179,15 @@ pub fn auto_detect_filter(input: &str) -> fn(&str) -> String {
         return crate::cmds::python::pytest_cmd::filter_pytest_output;
     }
 
+    let first_trimmed = first_1k.trim_start();
+
     // phpunit banner: "PHPUnit X.Y.Z by Sebastian Bergmann and contributors."
-    if first_1k.contains("by Sebastian Bergmann") {
+    // Anchor to the leading "PHPUnit " token so a LICENSE/composer/`git log`
+    // that merely mentions the author isn't misrouted here.
+    if first_trimmed.starts_with("PHPUnit ") && first_1k.contains("by Sebastian Bergmann") {
         return crate::cmds::php::phpunit_cmd::filter_phpunit_output;
     }
 
-    let first_trimmed = first_1k.trim_start();
     if first_trimmed.starts_with('{') && first_1k.contains("\"Action\"") {
         return go_test_wrapper;
     }
@@ -287,6 +290,16 @@ mod tests {
         let f = auto_detect_filter(input);
         let out = f(input);
         assert!(out.starts_with("PHPUnit:"), "out={}", out);
+    }
+
+    #[test]
+    fn test_auto_detect_phpunit_not_misrouted_by_author_mention() {
+        // Text that merely mentions the author (LICENSE, git log, composer meta)
+        // must pass through untouched, not route to the phpunit filter.
+        let input = "commit abc123\nAuthor: written by Sebastian Bergmann and contributors\n\n    Update changelog\n";
+        let f = auto_detect_filter(input);
+        let out = f(input);
+        assert_eq!(out, input, "should pass through unchanged, got: {}", out);
     }
 
     #[test]
