@@ -498,10 +498,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-06-25 |
-| Status | PASSED |
-| Summary | 8 upstream commits merged (pulumi filters, grep fixes, dotnet improvements). Main Cargo.lock clean (rustls-webpki 0.103.13 patched); 0 verified secrets (TruffleHog across 13,223 chunks); Semgrep 0 findings; all Gitleaks/OSV findings are false positives or isolated to stale worktrees. |
-| Report | [Security reports/security-audit-2026-06-25.md](Security%20reports/security-audit-2026-06-25.md) |
+| Last audit | 2026-07-01 |
+| Status | ISSUES FIXED |
+| Summary | 8 upstream commits merged (uv run support, Cursor hook fixes). anyhow upgraded 1.0.102→1.0.103 (RUSTSEC-2026-0190). Fixed 4 upstream merge bugs: compile error in uv_cmd.rs, uv rewrite fallthrough, uv subcommand classification, and permission-sensitive hook tests. 0 verified secrets (TruffleHog); Semgrep 0 findings; all Gitleaks/OSV findings are false positives post-fix. |
+| Report | [Security reports/security-audit-2026-07-01.md](Security%20reports/security-audit-2026-07-01.md) |
 
 ## Contributing
 

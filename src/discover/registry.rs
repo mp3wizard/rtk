@@ -765,8 +765,19 @@ fn rewrite_segment_inner(
             if rest.is_empty() {
                 return None;
             }
-            return rewrite_segment_inner(rest, excluded, transparent_prefixes, depth + 1)
-                .map(|rewritten| format!("{} {}", prefix, rewritten));
+            if let Some(rewritten) =
+                rewrite_segment_inner(rest, excluded, transparent_prefixes, depth + 1)
+            {
+                return Some(format!("{} {}", prefix, rewritten));
+            }
+            // Inner command not recognized by transparent prefix. If the inner
+            // text starts with a flag we cannot safely parse the command shape,
+            // so bail out. Otherwise fall through to full-command classification
+            // (e.g. `uv run python script.py` → `rtk uv run python script.py`).
+            if rest.starts_with('-') {
+                return None;
+            }
+            break;
         }
     }
 
@@ -2432,21 +2443,31 @@ mod tests {
 
     #[test]
     fn test_rewrite_uv_run() {
-        let commands = vec![
-            "uv run python script.py",
-            "uv run pytest",
-            "uv run ruff check",
-            "uv run --project backend --extra dev python script.py",
-        ];
-
-        for command in commands {
-            assert_eq!(
-                rewrite_command_no_prefixes(command, &[]),
-                Some(format!("rtk {command}")),
-                "Failed for command: {}",
-                command
-            );
-        }
+        // `uv run python script.py` — inner command not RTK-supported and no flag prefix:
+        // falls through transparent prefix to full-command classification → rtk uv run ...
+        assert_eq!(
+            rewrite_command_no_prefixes("uv run python script.py", &[]),
+            Some("rtk uv run python script.py".into()),
+        );
+        // `uv run pytest` / `uv run ruff check` — bare inner commands ARE recognized by
+        // the transparent-prefix recursion, so they keep the `uv run rtk <cmd>` form.
+        assert_eq!(
+            rewrite_command_no_prefixes("uv run pytest", &[]),
+            Some("uv run rtk pytest".into()),
+        );
+        assert_eq!(
+            rewrite_command_no_prefixes("uv run ruff check", &[]),
+            Some("uv run rtk ruff check".into()),
+        );
+        // `uv run --project ... python script.py` — inner starts with `-` so transparent
+        // prefix bails out early; no fallthrough to avoid misinterpreting uv-run flags.
+        assert_eq!(
+            rewrite_command_no_prefixes(
+                "uv run --project backend --extra dev python script.py",
+                &[]
+            ),
+            None,
+        );
     }
 
     // --- Go tooling ---

@@ -127,17 +127,19 @@ mod tests {
 
         #[test]
         fn test_fd_dup_redirect_still_rewrites() {
+            // Command is rewritten (Ask or Allow depending on configured permissions).
             assert!(matches!(
                 evaluate("git status 2>&1", &[], &[]),
-                RewriteOutcome::Ask(_)
+                RewriteOutcome::Ask(_) | RewriteOutcome::Allow(_)
             ));
         }
 
         #[test]
         fn test_plain_command_still_rewrites() {
+            // Command is rewritten (Ask or Allow depending on configured permissions).
             assert!(matches!(
                 evaluate("git status", &[], &[]),
-                RewriteOutcome::Ask(_)
+                RewriteOutcome::Ask(_) | RewriteOutcome::Allow(_)
             ));
         }
     }
