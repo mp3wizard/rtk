@@ -7,8 +7,6 @@ pub const DEFAULT_HISTORY_DAYS: i64 = 90;
 
 /// RTK-only subcommands that should never fall back to raw execution.
 /// When adding a new RTK-only subcommand to `Commands`, add its clap name here.
-/// Also used as a hook rewrite collision guard via
-/// [`crate::core::toml_filter::is_rtk_reserved_command`].
 pub const RTK_META_COMMANDS: &[&str] = &[
     "gain",
     "discover",

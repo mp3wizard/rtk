@@ -367,6 +367,14 @@ enum Commands {
         #[arg(long = "no-patch", group = "patch")]
         no_patch: bool,
 
+        /// Trust and enable detected custom filters without prompting
+        #[arg(long = "trust-filters", group = "trust")]
+        trust_filters: bool,
+
+        /// Leave detected custom filters disabled without prompting
+        #[arg(long = "no-trust-filters", group = "trust")]
+        no_trust_filters: bool,
+
         /// Remove RTK artifacts for the selected assistant mode
         #[arg(long)]
         uninstall: bool,
@@ -1243,9 +1251,6 @@ fn run_fallback(parse_error: clap::Error) -> Result<i32> {
                     core::toml_filter::apply_filter_with_info(filter, &combined_raw);
                 let lossy = !matches!(loss, core::toml_filter::Lossiness::None);
 
-                // Recovery hint: prefer the line-offset tail hint for a
-                // contiguous tail-drop; full-output hint otherwise. On failure,
-                // tee the whole raw so the LLM can re-read it.
                 let hint = if !success {
                     core::tee::tee_and_hint(&combined_raw, &raw_command, exit_code)
                 } else {
@@ -1263,8 +1268,7 @@ fn run_fallback(parse_error: clap::Error) -> Result<i32> {
                     }
                 };
 
-                // Never emit an unrecoverable truncation marker: if content was
-                // dropped but no tee file could be written, show the full raw.
+                // Never emit an unrecoverable truncation marker: fall back to full raw.
                 let shown = if lossy && hint.is_none() {
                     core::runner::emit_guarded(&combined_raw, None, &combined_raw)
                 } else {
@@ -1884,6 +1888,8 @@ fn run_cli() -> Result<i32> {
             hook_only,
             auto_patch,
             no_patch,
+            trust_filters,
+            no_trust_filters,
             uninstall,
             codex,
             copilot,
@@ -1969,6 +1975,14 @@ fn run_cli() -> Result<i32> {
                     patch_mode,
                     ctx,
                 )?;
+                let filter_trust = if trust_filters {
+                    hooks::init::FilterTrust::Trust
+                } else if no_trust_filters || auto_patch {
+                    hooks::init::FilterTrust::Skip
+                } else {
+                    hooks::init::FilterTrust::Ask
+                };
+                hooks::init::finalize_filter_trust(global, dry_run, filter_trust)?;
             }
             0
         }

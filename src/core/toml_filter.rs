@@ -22,7 +22,7 @@
 ///   6. head/tail_lines      — keep first/last N lines
 ///   7. max_lines            — absolute line cap
 ///   8. on_empty             — message if result is empty
-use super::constants::{FILTERS_TOML, RTK_DATA_DIR, RTK_META_COMMANDS};
+use super::constants::RTK_META_COMMANDS;
 use lazy_static::lazy_static;
 use regex::{Regex, RegexSet};
 use serde::Deserialize;
@@ -188,53 +188,52 @@ impl TomlFilterRegistry {
     fn load() -> Self {
         let mut filters = Vec::new();
 
-        // Priority 1: project-local .rtk/filters.toml (trust-gated)
-        let project_filter_path = std::path::Path::new(".rtk/filters.toml");
-        if project_filter_path.exists() {
-            let (trust_status, verified_content) =
-                crate::hooks::trust::check_trust_with_content(project_filter_path)
-                    .unwrap_or((crate::hooks::trust::TrustStatus::Untrusted, None));
-
-            match trust_status {
-                crate::hooks::trust::TrustStatus::Trusted
-                | crate::hooks::trust::TrustStatus::EnvOverride => {
-                    if let Some(content) = verified_content {
-                        match Self::parse_and_compile(&content, "project") {
-                            Ok(f) => filters.extend(f),
-                            Err(e) => eprintln!("[rtk] warning: .rtk/filters.toml: {}", e),
-                        }
-                    }
-                }
-                crate::hooks::trust::TrustStatus::Untrusted => {
-                    eprintln!("[rtk] WARNING: untrusted project filters (.rtk/filters.toml)");
-                    eprintln!("[rtk] Filters NOT applied. Run `rtk trust` to review and enable.");
-                }
-                crate::hooks::trust::TrustStatus::ContentChanged { .. } => {
-                    eprintln!("[rtk] WARNING: .rtk/filters.toml changed since trusted.");
-                    eprintln!("[rtk] Filters NOT applied. Run `rtk trust` to re-review.");
-                }
-            }
+        for path in crate::hooks::trust::gated_filter_paths() {
+            Self::extend_with_trusted(&mut filters, &path);
         }
 
-        // Priority 2: user-global ~/.config/rtk/filters.toml
-        if let Some(config_dir) = dirs::config_dir() {
-            let global_path = config_dir.join(RTK_DATA_DIR).join(FILTERS_TOML);
-            if let Ok(content) = std::fs::read_to_string(&global_path) {
-                match Self::parse_and_compile(&content, "user-global") {
-                    Ok(f) => filters.extend(f),
-                    Err(e) => eprintln!("[rtk] warning: {}: {}", global_path.display(), e),
-                }
-            }
-        }
-
-        // Priority 3: built-in (embedded at compile time)
-        let builtin = BUILTIN_TOML;
-        match Self::parse_and_compile(builtin, "builtin") {
+        match Self::parse_and_compile(BUILTIN_TOML, "builtin") {
             Ok(f) => filters.extend(f),
             Err(e) => eprintln!("[rtk] warning: builtin filters: {}", e),
         }
 
         TomlFilterRegistry { filters }
+    }
+
+    fn extend_with_trusted(filters: &mut Vec<CompiledFilter>, path: &std::path::Path) {
+        if !path.exists() {
+            return;
+        }
+        let label = path.display().to_string();
+        let (status, content) = crate::hooks::trust::check_trust_with_content(path)
+            .unwrap_or((crate::hooks::trust::TrustStatus::Untrusted, None));
+        match status {
+            crate::hooks::trust::TrustStatus::Trusted
+            | crate::hooks::trust::TrustStatus::EnvOverride => {
+                if let Some(content) = content {
+                    match Self::parse_and_compile(&content, &label) {
+                        Ok(f) => filters.extend(f),
+                        Err(e) => eprintln!("[rtk] warning: {}: {}", label, e),
+                    }
+                }
+            }
+            crate::hooks::trust::TrustStatus::Untrusted => {
+                if path_defines_filters(path) {
+                    eprintln!(
+                        "[rtk] WARNING: untrusted filters {} — NOT applied. Run `rtk trust` to review and enable.",
+                        label
+                    );
+                }
+            }
+            crate::hooks::trust::TrustStatus::ContentChanged { .. } => {
+                if path_defines_filters(path) {
+                    eprintln!(
+                        "[rtk] WARNING: {} changed since trusted — NOT applied. Run `rtk trust` to re-review.",
+                        label
+                    );
+                }
+            }
+        }
     }
 
     fn parse_and_compile(content: &str, source: &str) -> Result<Vec<CompiledFilter>, String> {
@@ -314,8 +313,6 @@ const RUST_HANDLED_COMMANDS: &[&str] = &[
     "learn",
 ];
 
-/// True if `rtk <name>` is consumed by Clap itself (a Rust-handled command or
-/// meta-command). The hook's collision guard: it must not rewrite such a name.
 pub fn is_rtk_reserved_command(name: &str) -> bool {
     RUST_HANDLED_COMMANDS.contains(&name) || RTK_META_COMMANDS.contains(&name)
 }
@@ -416,10 +413,25 @@ lazy_static! {
     static ref REGISTRY: TomlFilterRegistry = TomlFilterRegistry::load();
 }
 
-/// True when the TOML engine is disabled via `RTK_NO_TOML=1`. Single source for
-/// the toggle, shared by the direct path (run_fallback) and the hook bridge.
 pub fn toml_disabled() -> bool {
     std::env::var("RTK_NO_TOML").ok().as_deref() == Some("1")
+}
+
+pub fn active_filter_summaries(content: &str) -> Vec<(String, String)> {
+    toml::from_str::<TomlFilterFile>(content)
+        .map(|f| {
+            f.filters
+                .into_iter()
+                .map(|(name, def)| (name, def.match_command))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn path_defines_filters(path: &std::path::Path) -> bool {
+    std::fs::read_to_string(path)
+        .map(|c| !active_filter_summaries(&c).is_empty())
+        .unwrap_or(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -450,30 +462,17 @@ pub fn apply_filter(filter: &CompiledFilter, stdout: &str) -> String {
     apply_filter_with_info(filter, stdout).0
 }
 
-/// Describes what content [`apply_filter_with_info`] dropped, so the caller can
-/// attach the right reversibility (tee) hint.
 #[derive(Debug, PartialEq)]
 pub enum Lossiness {
-    /// Nothing was dropped, or only intended noise removal (strip/keep/on_empty)
-    /// — no recovery hint needed.
     None,
-    /// A contiguous tail was dropped (head-only or pure max_lines cap).
-    /// `tee_payload` is the content to write to the tee file; `tail_offset` is
-    /// the 1-based first dropped line within it, so
-    /// `tail -n +{tail_offset} <file>` reproduces exactly the omitted lines.
+    /// `tail -n +{tail_offset}` over `tee_payload` reproduces the dropped lines.
     Tail {
         tee_payload: String,
         tail_offset: usize,
     },
-    /// Non-contiguous or whole-blob loss (head+tail middle drop, tail-only
-    /// prefix drop, per-line `truncate_lines_at`, or `match_output`
-    /// replacement). Recoverable only via the full output.
     Whole,
 }
 
-/// Like [`apply_filter`], but also reports what content was dropped (see
-/// [`Lossiness`]) so callers can emit a reversibility hint pointing at the raw
-/// output. `apply_filter` is the pure-string wrapper over this.
 pub fn apply_filter_with_info(filter: &CompiledFilter, stdout: &str) -> (String, Lossiness) {
     let mut lines: Vec<String> = stdout.lines().map(String::from).collect();
 
@@ -539,9 +538,6 @@ pub fn apply_filter_with_info(filter: &CompiledFilter, stdout: &str) -> (String,
             .collect();
     }
 
-    // A tail hint is only possible for a contiguous tail-drop (head-only or pure
-    // max_lines cap). Snapshot the pre-cut content only in that case so the hint
-    // can point `tail -n +N` at it — and avoid cloning on every other path.
     let snapshot_for_tail = !intra_line_loss
         && filter.tail_lines.is_none()
         && (filter.head_lines.is_some() || filter.max_lines.is_some());
@@ -593,8 +589,6 @@ pub fn apply_filter_with_info(filter: &CompiledFilter, stdout: &str) -> (String,
         }
     }
 
-    // A head-only or pure max_lines cap drops a contiguous tail (recoverable via a
-    // `tail -n +N` hint over the snapshot); every other loss needs the full output.
     let loss = if let Some(snapshot) = pre_cut {
         match (head_cut, max_cut) {
             (Some(_), Some(_)) => Lossiness::Whole,

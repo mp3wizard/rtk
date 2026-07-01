@@ -815,20 +815,16 @@ fn rewrite_segment_inner(
             }
             rtk_equivalent
         }
-        // No RULES match: consult the TOML registry so the hook also rewrites
-        // TOML-covered commands (e.g. `jj log` → `rtk jj log`). (#2179)
+        // TOML-only commands: consult the registry so the hook filters them too (#2179).
         Classification::Unsupported { .. } => {
             if crate::core::toml_filter::toml_disabled() {
                 return None;
             }
-            // Match on the basename, matching run_fallback's lookup, so exclusion
-            // and filter matching agree for absolute-path invocations.
             let normalized = strip_absolute_path(cmd_part.trim());
             if is_excluded(&normalized, excluded) {
                 return None;
             }
             let base = normalized.split_whitespace().next().unwrap_or("");
-            // Skip names Clap would route to its own subcommand (bypasses TOML).
             if crate::core::toml_filter::is_rtk_reserved_command(base) {
                 return None;
             }
@@ -1375,11 +1371,6 @@ mod tests {
         assert_eq!(rewrite_command_no_prefixes("cd /tmp", &[]), None);
     }
 
-    // --- TOML-filter-covered commands wired into the hook (#2179) ---
-    // These commands have a built-in TOML filter (src/filters/<name>.toml) but
-    // no `RULES` row, so they exercise the Unsupported→TOML bridge. The hook
-    // rewrites them to `rtk <cmd>`, which re-enters via run_fallback → TOML tier.
-
     #[test]
     fn test_rewrite_toml_orphan_jj() {
         assert_eq!(
@@ -1406,8 +1397,6 @@ mod tests {
 
     #[test]
     fn test_rewrite_toml_absolute_path() {
-        // Matched by basename (jj), but the emitted command keeps the explicit
-        // path; run_fallback re-basenames it back to `jj` to match the filter.
         assert_eq!(
             rewrite_command_no_prefixes("/usr/bin/jj log", &[]),
             Some("rtk /usr/bin/jj log".into())
@@ -1454,7 +1443,6 @@ mod tests {
 
     #[test]
     fn test_rewrite_toml_exclude_matches_absolute_path() {
-        // Excluding "jj" must also exclude /usr/bin/jj (matched on the basename).
         let excluded = vec!["jj".to_string()];
         assert_eq!(
             rewrite_command_no_prefixes("/usr/bin/jj log", &excluded),
@@ -1464,7 +1452,6 @@ mod tests {
 
     #[test]
     fn test_rewrite_toml_unknown_command_still_none() {
-        // No RULES row and no TOML filter → passthrough (None).
         assert_eq!(rewrite_command_no_prefixes("frobnicate xyz", &[]), None);
     }
 

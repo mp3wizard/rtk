@@ -79,6 +79,14 @@ pub enum PatchMode {
     Skip, // --no-patch: manual instructions
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum FilterTrust {
+    #[default]
+    Ask,
+    Trust,
+    Skip,
+}
+
 /// Result of settings.json patching operation
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PatchResult {
@@ -1412,6 +1420,85 @@ fn generate_global_filters_template(ctx: InitContext) -> Result<()> {
         "  filters:   {} (template, edit to add user-global filters)",
         path.display()
     );
+    Ok(())
+}
+
+pub fn finalize_filter_trust(global: bool, dry_run: bool, trust: FilterTrust) -> Result<()> {
+    let paths = crate::hooks::trust::gated_filter_paths();
+    let path = match if global { paths.get(1) } else { paths.first() } {
+        Some(p) => p,
+        None => return Ok(()),
+    };
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let status = crate::hooks::trust::check_trust(path)
+        .unwrap_or(crate::hooks::trust::TrustStatus::Untrusted);
+    if matches!(
+        status,
+        crate::hooks::trust::TrustStatus::Trusted | crate::hooks::trust::TrustStatus::EnvOverride
+    ) {
+        return Ok(());
+    }
+
+    let bytes = match fs::read(path) {
+        Ok(b) => b,
+        Err(_) => return Ok(()),
+    };
+    let content = String::from_utf8_lossy(&bytes);
+    let filters = crate::core::toml_filter::active_filter_summaries(&content);
+    if filters.is_empty() {
+        return Ok(());
+    }
+
+    if dry_run {
+        println!(
+            "[dry-run] {} untrusted custom filter(s) in {}",
+            filters.len(),
+            path.display()
+        );
+        return Ok(());
+    }
+
+    let yellow = "\x1b[33m";
+    let reset = "\x1b[0m";
+    eprintln!();
+    eprintln!(
+        "{yellow}Detected {} custom filter(s) in {} — they rewrite matching command output:{reset}",
+        filters.len(),
+        path.display()
+    );
+    for (name, regex) in &filters {
+        eprintln!("{yellow}    {name:<20} {regex}{reset}");
+    }
+
+    let enable = match trust {
+        FilterTrust::Trust => true,
+        FilterTrust::Skip => false,
+        FilterTrust::Ask => {
+            use std::io::{self, BufRead, IsTerminal};
+            if io::stdin().is_terminal() {
+                eprint!("{yellow}  Enable these filters? [y/N] {reset}");
+                let mut line = String::new();
+                io::stdin()
+                    .lock()
+                    .read_line(&mut line)
+                    .context("Failed to read user input")?;
+                matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
+            } else {
+                false
+            }
+        }
+    };
+
+    if enable {
+        let hash = crate::hooks::integrity::compute_hash_bytes(&bytes);
+        crate::hooks::trust::trust_filter_with_hash(path, &hash)?;
+        eprintln!("Enabled. Revoke with `rtk untrust`.");
+    } else {
+        eprintln!("{yellow}  Not enabled — run `rtk trust` to review and enable.{reset}");
+    }
     Ok(())
 }
 
