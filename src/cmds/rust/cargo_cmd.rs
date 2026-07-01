@@ -95,8 +95,7 @@ impl BlockHandler for CargoBuildHandler {
 
     fn format_summary(&self, exit_code: i32, raw: &str) -> Option<String> {
         let json = extract_json_diagnostics(raw);
-        let errors = self.error_count.max(json.errors.len());
-        let warnings = self.warnings.max(json.warnings.len());
+        let (errors, warnings) = merge_diag_counts(self.error_count, self.warnings, &json);
 
         if errors == 0 && warnings == 0 && exit_code == 0 {
             return Some(cargo_build_success_line(
@@ -802,6 +801,13 @@ fn extract_json_diagnostics(raw: &str) -> JsonDiagnostics {
     JsonDiagnostics { errors, warnings }
 }
 
+fn merge_diag_counts(error_count: usize, warnings: usize, json: &JsonDiagnostics) -> (usize, usize) {
+    (
+        error_count.max(json.errors.len()),
+        warnings.max(json.warnings.len()),
+    )
+}
+
 fn cargo_build_success_line(compiled: usize, finished: Option<&str>) -> String {
     let mut s = format!("cargo build ({} crates compiled)", compiled);
     if let Some(f) = finished {
@@ -883,8 +889,7 @@ fn filter_cargo_build(output: &str) -> String {
     }
 
     let json = extract_json_diagnostics(output);
-    let errors = handler.error_count.max(json.errors.len());
-    let warnings = handler.warnings.max(json.warnings.len());
+    let (errors, warnings) = merge_diag_counts(handler.error_count, handler.warnings, &json);
 
     if errors == 0 && warnings == 0 {
         return cargo_build_success_line(handler.compiled, handler.finished_line.as_deref());
