@@ -414,6 +414,54 @@ pub fn active_filter_summaries(content: &str) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
+lazy_static! {
+    static ref MATCH_SET: RegexSet = build_match_set();
+}
+
+pub fn command_matches_filter(command: &str) -> bool {
+    MATCH_SET.is_match(command)
+}
+
+fn build_match_set() -> RegexSet {
+    let patterns = collect_match_patterns();
+    RegexSet::new(&patterns).unwrap_or_else(|_| {
+        let valid: Vec<String> = patterns
+            .into_iter()
+            .filter(|p| Regex::new(p).is_ok())
+            .collect();
+        RegexSet::new(&valid).unwrap_or_else(|_| RegexSet::empty())
+    })
+}
+
+fn collect_match_patterns() -> Vec<String> {
+    let mut patterns: Vec<String> = Vec::new();
+    for path in crate::hooks::trust::gated_filter_paths() {
+        if !path.exists() {
+            continue;
+        }
+        let (status, content) = crate::hooks::trust::check_trust_with_content(&path)
+            .unwrap_or((crate::hooks::trust::TrustStatus::Untrusted, None));
+        if matches!(
+            status,
+            crate::hooks::trust::TrustStatus::Trusted
+                | crate::hooks::trust::TrustStatus::EnvOverride
+        ) {
+            if let Some(content) = content {
+                patterns.extend(match_patterns_in(&content));
+            }
+        }
+    }
+    patterns.extend(match_patterns_in(BUILTIN_TOML));
+    patterns
+}
+
+fn match_patterns_in(content: &str) -> Vec<String> {
+    active_filter_summaries(content)
+        .into_iter()
+        .map(|(_, pattern)| pattern)
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Public API — pure functions (testable without global state)
 // ---------------------------------------------------------------------------
@@ -761,6 +809,17 @@ mod tests {
             .into_iter()
             .next()
             .expect("expected at least one filter")
+    }
+
+    #[test]
+    fn command_matches_filter_agrees_with_find_matching_filter() {
+        for cmd in ["jj log", "jq .", "frobnicate xyz", "cd /tmp"] {
+            assert_eq!(
+                command_matches_filter(cmd),
+                find_matching_filter(cmd).is_some(),
+                "match-set disagreed with registry for {cmd:?}"
+            );
+        }
     }
 
     #[test]

@@ -828,7 +828,7 @@ fn rewrite_segment_inner(
             if crate::core::toml_filter::is_rtk_reserved_command(base) {
                 return None;
             }
-            if crate::core::toml_filter::find_matching_filter(&normalized).is_some() {
+            if crate::core::toml_filter::command_matches_filter(&normalized) {
                 return Some(format!("rtk {}{}", cmd_part, redirect_suffix));
             }
             return None;
