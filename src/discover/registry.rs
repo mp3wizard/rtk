@@ -653,13 +653,8 @@ fn rewrite_line_range(cmd: &str) -> Option<String> {
 
 /// Built-in transparent wrappers that use the same strip/recurse/re-prepend
 /// contract as user-configured `transparent_prefixes`.
-const BUILTIN_TRANSPARENT_PREFIXES: &[&str] = &[
-    "noglob",
-    "command",
-    "builtin",
-    "exec",
-    "nocorrect",
-];
+const BUILTIN_TRANSPARENT_PREFIXES: &[&str] =
+    &["noglob", "command", "builtin", "exec", "nocorrect"];
 
 const MAX_PREFIX_DEPTH: usize = 10;
 
