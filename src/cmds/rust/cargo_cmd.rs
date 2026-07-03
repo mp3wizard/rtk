@@ -903,8 +903,8 @@ fn filter_cargo_build(output: &str) -> String {
     filter_cargo_build_labeled(output, "build")
 }
 
-fn filter_cargo_build_labeled(output: &str, label: &str) -> String {
-    let mut handler = CargoBuildHandler::new();
+fn filter_cargo_build_labeled(output: &str, label: &'static str) -> String {
+    let mut handler = CargoBuildHandler::with_label(label);
     let mut blocks: Vec<Vec<String>> = Vec::new();
     let mut current_block: Vec<String> = Vec::new();
     let mut in_block = false;
