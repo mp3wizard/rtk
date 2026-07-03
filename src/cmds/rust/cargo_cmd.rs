@@ -104,22 +104,25 @@ impl BlockHandler for CargoBuildHandler {
         !(line.trim().is_empty() && block.len() > 3)
     }
 
-    fn format_summary(&self, exit_code: i32, raw: &str) -> Option<String> {
-        let json = extract_json_diagnostics(raw);
-        let (errors, warnings) = merge_diag_counts(self.error_count, self.warnings, &json);
-
-        if errors == 0 && warnings == 0 && exit_code == 0 {
+    fn format_summary(&self, exit_code: i32, _raw: &str) -> Option<String> {
+        if self.error_count == 0 && self.warnings == 0 && exit_code == 0 {
             return Some(cargo_build_success_line(
                 self.compiled,
                 self.finished_line.as_deref(),
                 self.label,
             ));
         }
+        // The streamed path only runs for non-json build/check; error blocks are
+        // emitted live, so the summary carries no rendered diagnostics.
+        let empty = JsonDiagnostics {
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        };
         Some(cargo_build_failure_summary(
             self.compiled,
-            errors,
-            warnings,
-            &json,
+            self.error_count,
+            self.warnings,
+            &empty,
             self.label,
             exit_code,
         ))
@@ -2360,27 +2363,7 @@ error: aborting due to 1 previous error
     }
 
     #[test]
-    fn test_cargo_build_stream_json_failure_not_compiled() {
-        let input = concat!(
-            "   Compiling v_cargo v0.1.0 (/tmp/v_cargo)\n",
-            r#"{"reason":"compiler-message","package_id":"v_cargo 0.1.0","message":{"code":{"code":"E0308"},"level":"error","message":"mismatched types","rendered":"error[E0308]: mismatched types\n --> src/main.rs:2:18"}}"#,
-            "\n",
-            r#"{"reason":"build-finished","success":false}"#,
-            "\n",
-        );
-        let mut f = BlockStreamFilter::new(CargoBuildHandler::new());
-        let result = run_block_filter(&mut f, input, 101);
-        assert!(result.contains("E0308"), "got: {}", result);
-        assert!(result.contains("1 errors"), "got: {}", result);
-        assert!(
-            !result.contains("crates compiled"),
-            "failed json build must not be reported as compiled: {}",
-            result
-        );
-    }
-
-    #[test]
-    fn test_cargo_build_stream_json_warning_rendered() {
+    fn test_filter_cargo_build_json_warning_rendered() {
         let input = concat!(
             "   Compiling v_cargo v0.1.0 (/tmp/v_cargo)\n",
             r#"{"reason":"compiler-message","package_id":"v_cargo 0.1.0","message":{"level":"warning","message":"unused variable: `x`","rendered":"warning: unused variable: `x`\n --> src/main.rs:2:9"}}"#,
@@ -2388,8 +2371,7 @@ error: aborting due to 1 previous error
             r#"{"reason":"build-finished","success":true}"#,
             "\n",
         );
-        let mut f = BlockStreamFilter::new(CargoBuildHandler::new());
-        let result = run_block_filter(&mut f, input, 0);
+        let result = filter_cargo_build_labeled(input, "build", 0);
         assert!(result.contains("unused variable"), "got: {}", result);
         assert!(result.contains("1 warnings"), "got: {}", result);
         assert!(!result.contains("crates compiled"), "got: {}", result);
@@ -2402,22 +2384,6 @@ error: aborting due to 1 previous error
         let result = run_block_filter(&mut f, input, 0);
         assert!(result.contains("cargo check"), "got: {}", result);
         assert!(!result.contains("cargo build"), "got: {}", result);
-    }
-
-    #[test]
-    fn test_cargo_check_stream_json_failure_label() {
-        let input = concat!(
-            "   Checking v_cargo v0.1.0 (/tmp/v_cargo)\n",
-            r#"{"reason":"compiler-message","package_id":"v_cargo 0.1.0","message":{"code":{"code":"E0308"},"level":"error","message":"mismatched types","rendered":"error[E0308]: mismatched types\n --> src/main.rs:2:18"}}"#,
-            "\n",
-            r#"{"reason":"build-finished","success":false}"#,
-            "\n",
-        );
-        let mut f = BlockStreamFilter::new(CargoBuildHandler::for_check());
-        let result = run_block_filter(&mut f, input, 101);
-        assert!(result.contains("cargo check:"), "got: {}", result);
-        assert!(!result.contains("cargo build:"), "got: {}", result);
-        assert!(result.contains("1 errors"), "got: {}", result);
     }
 
     #[test]
