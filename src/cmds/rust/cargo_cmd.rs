@@ -352,6 +352,11 @@ fn run_test(args: &[String], verbose: u8) -> Result<i32> {
 }
 
 fn run_clippy(args: &[String], verbose: u8) -> Result<i32> {
+    if has_json_message_format(args) {
+        return run_cargo_filtered("clippy", args, verbose, |o| {
+            filter_cargo_build_labeled(o, "clippy")
+        });
+    }
     run_cargo_filtered("clippy", args, verbose, filter_cargo_clippy)
 }
 
@@ -2347,6 +2352,25 @@ error: aborting due to 1 previous error
         assert!(result.contains("cargo check:"), "got: {}", result);
         assert!(!result.contains("cargo build:"), "got: {}", result);
         assert!(result.contains("1 errors"), "got: {}", result);
+    }
+
+    #[test]
+    fn test_filter_cargo_build_labeled_clippy_json_not_clean() {
+        let input = concat!(
+            "    Checking demo v0.1.0 (/tmp/demo)\n",
+            r#"{"reason":"compiler-message","message":{"code":{"code":"E0308"},"level":"error","message":"mismatched types","rendered":"error[E0308]: mismatched types\n --> src/main.rs:2:18"}}"#,
+            "\n",
+            r#"{"reason":"build-finished","success":false}"#,
+            "\n",
+        );
+        let result = filter_cargo_build_labeled(input, "clippy");
+        assert!(result.contains("cargo clippy:"), "got: {}", result);
+        assert!(result.contains("1 errors"), "got: {}", result);
+        assert!(
+            !result.contains("No issues found"),
+            "json clippy errors must not be swallowed: {}",
+            result
+        );
     }
 
     #[test]
