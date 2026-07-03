@@ -6,6 +6,7 @@ use crate::core::stream::{BlockHandler, BlockStreamFilter, StreamFilter};
 use crate::core::truncate::{CAP_ERRORS, CAP_LIST, CAP_WARNINGS};
 use crate::core::utils::{resolved_command, truncate};
 use anyhow::Result;
+use serde::Deserialize;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -803,6 +804,20 @@ struct JsonDiagnostics {
     warnings: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct CargoJsonLine {
+    reason: String,
+    message: Option<CargoDiagnostic>,
+}
+
+#[derive(Deserialize)]
+struct CargoDiagnostic {
+    level: String,
+    #[serde(default)]
+    message: String,
+    rendered: Option<String>,
+}
+
 fn extract_json_diagnostics(raw: &str) -> JsonDiagnostics {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -811,29 +826,30 @@ fn extract_json_diagnostics(raw: &str) -> JsonDiagnostics {
         if !line.starts_with('{') {
             continue;
         }
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+        let Ok(entry) = serde_json::from_str::<CargoJsonLine>(line) else {
             continue;
         };
-        if v["reason"].as_str() != Some("compiler-message") {
+        if entry.reason != "compiler-message" {
             continue;
         }
-        let msg = &v["message"];
-        let bucket = match msg["level"].as_str() {
-            Some("error") => &mut errors,
-            Some("warning") => &mut warnings,
+        let Some(msg) = entry.message else {
+            continue;
+        };
+        let bucket = match msg.level.as_str() {
+            "error" | "error: internal compiler error" => &mut errors,
+            "warning" => &mut warnings,
             _ => continue,
         };
-        let text = msg["message"].as_str().unwrap_or("");
-        if text.starts_with("aborting due to")
-            || text.starts_with("could not compile")
-            || (text.contains("warning") && text.contains("generated"))
+        if msg.message.starts_with("aborting due to")
+            || msg.message.starts_with("could not compile")
+            || (msg.message.contains("warning") && msg.message.contains("generated"))
         {
             continue;
         }
-        if let Some(rendered) = msg["rendered"].as_str() {
-            bucket.push(crate::core::utils::strip_ansi(rendered).trim_end().to_string());
-        } else if !text.is_empty() {
-            bucket.push(text.to_string());
+        if let Some(rendered) = msg.rendered {
+            bucket.push(crate::core::utils::strip_ansi(&rendered).trim_end().to_string());
+        } else if !msg.message.is_empty() {
+            bucket.push(msg.message);
         }
     }
     JsonDiagnostics { errors, warnings }
@@ -2455,6 +2471,19 @@ error: aborting due to 1 previous error
             !json.warnings.iter().any(|w| w.contains("generated")),
             "the generated summary line must not appear in the output"
         );
+    }
+
+    #[test]
+    fn test_extract_json_diagnostics_counts_ice_as_error() {
+        let output = concat!(
+            r#"{"reason":"compiler-message","message":{"level":"error: internal compiler error","message":"unexpected panic","rendered":"error: internal compiler error: unexpected panic"}}"#,
+            "\n",
+            r#"{"reason":"build-finished","success":false}"#,
+            "\n",
+        );
+        let json = extract_json_diagnostics(output);
+        assert_eq!(json.errors.len(), 1, "an ICE must count as an error");
+        assert!(json.errors[0].contains("internal compiler error"), "got: {:?}", json.errors[0]);
     }
 
     #[test]
