@@ -44,14 +44,6 @@ struct CargoBuildHandler {
 }
 
 impl CargoBuildHandler {
-    fn new() -> Self {
-        Self::with_label("build")
-    }
-
-    fn for_check() -> Self {
-        Self::with_label("check")
-    }
-
     fn with_label(label: &'static str) -> Self {
         Self {
             compiled: 0,
@@ -377,7 +369,7 @@ fn run_build(args: &[String], verbose: u8) -> Result<i32> {
         "build",
         args,
         verbose,
-        Box::new(BlockStreamFilter::new(CargoBuildHandler::new())),
+        Box::new(BlockStreamFilter::new(CargoBuildHandler::with_label("build"))),
     )
 }
 
@@ -407,7 +399,7 @@ fn run_check(args: &[String], verbose: u8) -> Result<i32> {
         "check",
         args,
         verbose,
-        Box::new(BlockStreamFilter::new(CargoBuildHandler::for_check())),
+        Box::new(BlockStreamFilter::new(CargoBuildHandler::with_label("check"))),
     )
 }
 
@@ -2318,7 +2310,7 @@ error: test run failed
     #[test]
     fn test_cargo_build_stream_success() {
         let input = "   Compiling libc v0.2.153\n   Compiling cfg-if v1.0.0\n   Compiling rtk v0.5.0\n    Finished dev [unoptimized + debuginfo] target(s) in 15.23s\n";
-        let mut f = BlockStreamFilter::new(CargoBuildHandler::new());
+        let mut f = BlockStreamFilter::new(CargoBuildHandler::with_label("build"));
         let result = run_block_filter(&mut f, input, 0);
         assert!(result.contains("3 crates compiled"), "got: {}", result);
         assert!(result.contains("Finished"), "got: {}", result);
@@ -2335,7 +2327,7 @@ error: test run failed
             r#"{"reason":"build-finished","success":true}"#,
             "\n",
         );
-        let mut f = BlockStreamFilter::new(CargoBuildHandler::new());
+        let mut f = BlockStreamFilter::new(CargoBuildHandler::with_label("build"));
         let result = run_block_filter(&mut f, input, 0);
         assert!(result.contains("1 crates compiled"), "got: {}", result);
         assert!(result.contains("Finished"), "got: {}", result);
@@ -2354,7 +2346,7 @@ error[E0308]: mismatched types
 
 error: aborting due to 1 previous error
 "#;
-        let mut f = BlockStreamFilter::new(CargoBuildHandler::new());
+        let mut f = BlockStreamFilter::new(CargoBuildHandler::with_label("build"));
         let result = run_block_filter(&mut f, input, 1);
         assert!(result.contains("E0308"), "got: {}", result);
         assert!(result.contains("mismatched types"), "got: {}", result);
@@ -2380,7 +2372,7 @@ error: aborting due to 1 previous error
     #[test]
     fn test_cargo_check_stream_success_label() {
         let input = "   Checking demo v0.1.0 (/tmp/demo)\n    Finished dev [unoptimized + debuginfo] target(s) in 0.42s\n";
-        let mut f = BlockStreamFilter::new(CargoBuildHandler::for_check());
+        let mut f = BlockStreamFilter::new(CargoBuildHandler::with_label("check"));
         let result = run_block_filter(&mut f, input, 0);
         assert!(result.contains("cargo check"), "got: {}", result);
         assert!(!result.contains("cargo build"), "got: {}", result);
