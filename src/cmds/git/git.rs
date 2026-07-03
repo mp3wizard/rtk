@@ -1722,6 +1722,7 @@ fn compress_stat_summary(summary: &str) -> String {
         .replace("deletion(-)", "-")
         .replace("files changed", "changed")
         .replace("file changed", "changed")
+		.replace(",", "")
 }
 
 fn parse_stash_stat(stat: &str) -> (Vec<String>, String) {
