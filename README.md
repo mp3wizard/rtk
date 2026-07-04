@@ -490,6 +490,14 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 - **Adrien Eppling** — Core contributor
   [GitHub](https://github.com/aeppling) · [LinkedIn](https://www.linkedin.com/in/adrien-eppling/)
 
+## Security Audit
+| | |
+|-|-|
+| Last audit | 2026-07-04 |
+| Status | PASSED |
+| Summary | 23 upstream commits merged; no vulnerabilities found — all unsafe blocks are legitimate signal handlers |
+| Report | [Security reports/security-audit-2026-07-04.md](Security%20reports/security-audit-2026-07-04.md) |
+
 ## Contributing
 
 Contributions welcome! Please open an issue or PR on [GitHub](https://github.com/rtk-ai/rtk).
