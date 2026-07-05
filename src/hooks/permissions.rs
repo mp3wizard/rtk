@@ -1,4 +1,7 @@
-use super::constants::{CLAUDE_DIR, CURSOR_DIR, GEMINI_DIR, SETTINGS_JSON, SETTINGS_LOCAL_JSON};
+use super::constants::{
+    CLAUDE_DIR, CURSOR_DIR, DROID_DIR, DROID_HOME_ENV, DROID_SETTINGS_FILE, GEMINI_DIR,
+    SETTINGS_JSON, SETTINGS_LOCAL_JSON,
+};
 use crate::core::stream::exec_capture;
 use crate::discover::lexer::split_for_permissions;
 use serde_json::Value;
@@ -32,6 +35,7 @@ pub enum Host {
     Claude,
     Cursor,
     Gemini,
+    Droid,
 }
 
 pub fn check_command_for(cmd: &str, host: Host) -> PermissionVerdict {
@@ -39,6 +43,7 @@ pub fn check_command_for(cmd: &str, host: Host) -> PermissionVerdict {
         Host::Claude => load_permission_rules(),
         Host::Cursor => load_cursor_rules(),
         Host::Gemini => load_gemini_rules(),
+        Host::Droid => load_droid_rules(),
     };
     check_command_with_rules(cmd, &deny_rules, &ask_rules, &allow_rules)
 }
@@ -269,6 +274,103 @@ fn load_gemini_rules() -> (Vec<String>, Vec<String>, Vec<String>) {
         append_wrapped_rules(tools.get("confirmationRequired"), &shells, &mut ask);
     }
     (Vec::new(), ask, allow)
+}
+
+// Droid's built-in permission lists, mirrored from the shipped Droid CLI
+// (verified against v0.153.1). A user list in `settings.json` REPLACES the
+// matching default outright (`settings.commandAllowlist || DEFAULT`), so RTK
+// applies the same fallback. The default `commandBlocklist` is empty.
+const DROID_DEFAULT_ALLOWLIST: &[&str] = &[
+    "ls",
+    "pwd",
+    "dir",
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "git blame",
+    "git ls-files",
+];
+const DROID_DEFAULT_DENYLIST: &[&str] = &[
+    "rm -rf /",
+    "rm -rf /*",
+    "rm -rf .",
+    "rm -rf ~",
+    "rm -rf ~/*",
+    "rm -rf $HOME",
+    "rm -r /",
+    "rm -r /*",
+    "rm -r ~",
+    "rm -r ~/*",
+    "mkfs",
+    "mkfs.ext4",
+    "mkfs.ext3",
+    "mkfs.vfat",
+    "mkfs.ntfs",
+    "dd if=/dev/zero of=/dev",
+    "dd of=/dev",
+    "shutdown",
+    "reboot",
+    "halt",
+    "poweroff",
+    "init 0",
+    "init 6",
+    ":(){ :|: & };:",
+    ":() { :|:& };:",
+    "chmod -R 777 /",
+    "chmod -R 000 /",
+    "chown -R",
+    "Format-Volume",
+    "format.com",
+    "powershell Remove-Item -Recurse -Force",
+];
+
+// Global config only, honoring $FACTORY_HOME_OVERRIDE like the installer.
+fn droid_settings() -> Option<Value> {
+    let home = std::env::var_os(DROID_HOME_ENV)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(dirs::home_dir)?;
+    read_json(&home.join(DROID_DIR).join(DROID_SETTINGS_FILE))
+}
+
+/// Load Droid's own permission lists from `settings.json`.
+///
+/// Mapping: `commandAllowlist` → allow; `commandDenylist` (always confirm)
+/// and `commandBlocklist` (never runs) → deny. Both map to deny — not ask —
+/// so RTK steps aside entirely and Droid's native confirm/block fires on the
+/// original command. Rewriting first would dodge Droid's own pattern
+/// matching (`git push --force` → `rtk git push --force` no longer matches a
+/// `git push --force` list entry).
+fn load_droid_rules() -> (Vec<String>, Vec<String>, Vec<String>) {
+    droid_rules_from_settings(droid_settings().as_ref())
+}
+
+pub(crate) fn droid_rules_from_settings(
+    settings: Option<&Value>,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let list = |key: &str, default: &[&str]| -> Vec<String> {
+        settings
+            .and_then(|s| s.get(key))
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::trim)
+                    .filter(|rule| !rule.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_else(|| default.iter().map(|rule| rule.to_string()).collect())
+    };
+
+    let mut deny = list("commandBlocklist", &[]);
+    deny.extend(list("commandDenylist", DROID_DEFAULT_DENYLIST));
+    (
+        deny,
+        Vec::new(),
+        list("commandAllowlist", DROID_DEFAULT_ALLOWLIST),
+    )
 }
 
 /// Locate the project root by walking up from CWD looking for `.claude/`.
@@ -950,6 +1052,68 @@ mod tests {
     }
 
     // --- Per-host rule extraction ---
+
+    #[test]
+    fn test_droid_defaults_when_no_settings() {
+        let (deny, ask, allow) = droid_rules_from_settings(None);
+        assert!(ask.is_empty(), "Droid has no ask-shaped list");
+        assert!(allow.iter().any(|r| r == "git status"));
+        assert!(deny.iter().any(|r| r == "rm -rf /"));
+        // Default blocklist is empty — deny is exactly the default denylist.
+        assert_eq!(deny.len(), DROID_DEFAULT_DENYLIST.len());
+    }
+
+    #[test]
+    fn test_droid_user_lists_replace_defaults() {
+        let settings = serde_json::json!({
+            "commandAllowlist": ["cargo test"],
+            "commandDenylist": ["git push"],
+        });
+        let (deny, _, allow) = droid_rules_from_settings(Some(&settings));
+        assert_eq!(allow, vec!["cargo test"]);
+        // User denylist replaces the default denylist outright.
+        assert_eq!(deny, vec!["git push"]);
+    }
+
+    #[test]
+    fn test_droid_blocklist_and_denylist_both_deny() {
+        let settings = serde_json::json!({
+            "commandBlocklist": ["curl:*"],
+            "commandDenylist": ["git push"],
+        });
+        let (deny, ask, _) = droid_rules_from_settings(Some(&settings));
+        assert_eq!(deny, vec!["curl:*", "git push"]);
+        assert!(ask.is_empty());
+    }
+
+    #[test]
+    fn test_droid_malformed_entries_filtered() {
+        let settings = serde_json::json!({
+            "commandAllowlist": ["  git status  ", "", 42, null, {"nested": true}],
+        });
+        let (_, _, allow) = droid_rules_from_settings(Some(&settings));
+        assert_eq!(allow, vec!["git status"]);
+    }
+
+    #[test]
+    fn test_droid_default_allowlist_verdicts() {
+        let (deny, ask, allow) = droid_rules_from_settings(None);
+        // Read-only commands Droid auto-runs natively get Allow…
+        assert_eq!(
+            check_command_with_rules("git status --short", &deny, &ask, &allow),
+            PermissionVerdict::Allow
+        );
+        // …anything else stays Default so Droid's native flow decides…
+        assert_eq!(
+            check_command_with_rules("cargo build", &deny, &ask, &allow),
+            PermissionVerdict::Default
+        );
+        // …and the default denylist yields Deny (RTK steps aside).
+        assert_eq!(
+            check_command_with_rules("shutdown -h now", &deny, &ask, &allow),
+            PermissionVerdict::Deny
+        );
+    }
 
     #[test]
     fn test_wrapped_rules_cursor_shell_only() {

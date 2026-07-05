@@ -561,9 +561,17 @@ fn run_cursor_inner_with_rules(
 // shaped like Claude Code's: `tool_name`, `tool_input.command`, and a
 // `hookSpecificOutput` response with `permissionDecision` + `updatedInput`.
 // Droid's shell-execution tool is matched as `Execute`; non-Execute payloads
-// pass through silently.
+// pass through silently. Verdicts come from Droid's own permission lists
+// (`commandAllowlist`/`commandDenylist`/`commandBlocklist` in settings.json),
+// never from another agent's settings.
 
 fn process_droid_payload(v: &Value) -> Option<Value> {
+    let cmd = droid_execute_command(v)?;
+    droid_response_from_decision(v, cmd, decide_hook_action(cmd, permissions::Host::Droid))
+}
+
+/// Extract the shell command when the payload targets Droid's Execute tool.
+fn droid_execute_command(v: &Value) -> Option<&str> {
     let tool_name = v.get("tool_name").and_then(|t| t.as_str()).unwrap_or("");
     // `Execute` is Droid's shell tool. The installed matcher already gates
     // invocations to Execute; also tolerate a missing tool_name and accept
@@ -573,12 +581,9 @@ fn process_droid_payload(v: &Value) -> Option<Value> {
         return None;
     }
 
-    let cmd = v
-        .pointer("/tool_input/command")
+    v.pointer("/tool_input/command")
         .and_then(|c| c.as_str())
-        .filter(|c| !c.is_empty())?;
-
-    droid_response_from_decision(v, cmd, decide_hook_action(cmd, permissions::Host::Claude))
+        .filter(|c| !c.is_empty())
 }
 
 /// Build the Droid hook response for a decision from the shared flow.
@@ -608,19 +613,12 @@ fn droid_response_from_decision(v: &Value, cmd: &str, decision: HookDecision) ->
         ti
     };
 
-    // Wire format mirrors Claude's `hookSpecificOutput`; the allow policy mirrors
-    // `process_claude_payload`, NOT Cursor. Verified against Droid 0.140.0 and
-    // re-verified in the shipped v0.164.0 code: Droid applies a hook's
-    // `updatedInput` regardless of the permission decision — beyond the
-    // `case "allow"` branch it has an "updated input result" path that applies any
-    // hook's `updatedInput` even when no decision is set. So forcing "allow" is
-    // unnecessary for the rewrite to land, and would be harmful: Droid resolves
-    // the decision as `find(first result with a permissionDecision)` (no
-    // deny-over-allow priority), so an unconditional "allow" can suppress another
-    // PreToolUse hook's deny/ask and bypasses Droid's native permission prompt.
-    // We therefore only assert "allow" on an explicit allow rule; otherwise we
-    // omit the decision so the rewrite still applies while the user's other hooks
-    // and Droid's native prompt stay in control.
+    // Wire format mirrors Claude's `hookSpecificOutput`. Droid applies
+    // `updatedInput` even without a permission decision, and resolves decisions
+    // first-result-wins (verified against the shipped Droid CLI, v0.140.0–0.164.0),
+    // so "allow" is asserted only on an explicit allowlist match — forcing it
+    // unconditionally would suppress other hooks' deny/ask and bypass Droid's
+    // native permission prompt.
     let mut hook_output = json!({
         "hookEventName": PRE_TOOL_USE_KEY,
         "permissionDecisionReason": "RTK auto-rewrite",
@@ -656,10 +654,24 @@ pub fn run_droid() -> Result<()> {
     Ok(())
 }
 
+/// Hermetic test path: default Droid config (built-in lists, no settings file).
 #[cfg(test)]
 fn run_droid_inner(input: &str) -> Option<String> {
+    let (deny, ask, allow) = permissions::droid_rules_from_settings(None);
+    run_droid_inner_with_rules(input, &deny, &ask, &allow)
+}
+
+#[cfg(test)]
+fn run_droid_inner_with_rules(
+    input: &str,
+    deny_rules: &[String],
+    ask_rules: &[String],
+    allow_rules: &[String],
+) -> Option<String> {
     let v: Value = serde_json::from_str(input).ok()?;
-    process_droid_payload(&v).map(|o| o.to_string())
+    let cmd = droid_execute_command(&v)?;
+    let verdict = permissions::check_command_with_rules(cmd, deny_rules, ask_rules, allow_rules);
+    droid_response_from_decision(&v, cmd, decide_from_verdict(cmd, verdict)).map(|o| o.to_string())
 }
 
 #[cfg(test)]
@@ -1534,6 +1546,9 @@ mod tests {
 
     #[test]
     fn test_droid_rewrites_execute_tool() {
+        // `git status` is on Droid's built-in commandAllowlist (auto-run), so
+        // the rewrite carries `permissionDecision: allow` — exactly the
+        // verdict Droid would have emitted natively for the original command.
         let input = droid_input("Execute", "git status");
         let out = run_droid_inner(&input).expect("rewrite expected");
         let v: Value = serde_json::from_str(&out).unwrap();
@@ -1550,15 +1565,78 @@ mod tests {
                 .and_then(|c| c.as_str()),
             Some("PreToolUse")
         );
-        // Default verdict (no rule) must OMIT permissionDecision. Verified
-        // against Droid 0.140.0: `updatedInput` is applied regardless of the
-        // decision, so omitting it lets the rewrite land while preserving
-        // Droid's native prompt and other hooks' deny/ask (Droid picks the
-        // first hook result that sets a decision). Mirrors the Claude handler.
+        assert_eq!(
+            v.pointer("/hookSpecificOutput/permissionDecision")
+                .and_then(|c| c.as_str()),
+            Some("allow"),
+            "default-allowlisted command must auto-allow"
+        );
+    }
+
+    #[test]
+    fn test_droid_unlisted_command_omits_decision() {
+        // Not on any Droid list → rewrite lands via Droid's "updated input
+        // result" path with NO decision, leaving Droid's native prompt and
+        // other hooks' deny/ask in control.
+        let input = droid_input("Execute", "cargo build");
+        let out = run_droid_inner(&input).expect("rewrite expected");
+        let v: Value = serde_json::from_str(&out).unwrap();
+        assert!(
+            v.pointer("/hookSpecificOutput/updatedInput/command")
+                .and_then(|c| c.as_str())
+                .is_some_and(|c| c.starts_with("rtk ")),
+            "expected rtk-prefixed rewrite"
+        );
         assert!(
             v.pointer("/hookSpecificOutput/permissionDecision")
                 .is_none(),
-            "default verdict must not force a permission decision"
+            "unlisted command must not force a permission decision"
+        );
+    }
+
+    #[test]
+    fn test_droid_denylisted_command_steps_aside() {
+        // A commandDenylist match must produce NO output: rewriting would
+        // dodge Droid's own pattern match (`rtk git log` no longer matches a
+        // `git log` denylist entry), silently dropping the user's
+        // always-confirm rule. Stepping aside keeps Droid's native
+        // confirmation on the original command.
+        let settings = json!({ "commandDenylist": ["git log"] });
+        let (deny, ask, allow) = permissions::droid_rules_from_settings(Some(&settings));
+        let input = droid_input("Execute", "git log --oneline");
+        assert!(
+            run_droid_inner_with_rules(&input, &deny, &ask, &allow).is_none(),
+            "denylisted command must step aside (no output)"
+        );
+    }
+
+    #[test]
+    fn test_droid_blocklisted_command_steps_aside() {
+        // Same contract for commandBlocklist (never runs): step aside so
+        // Droid's Execute-level block fires on the original command.
+        let settings = json!({ "commandBlocklist": ["git status"] });
+        let (deny, ask, allow) = permissions::droid_rules_from_settings(Some(&settings));
+        let input = droid_input("Execute", "git status");
+        assert!(
+            run_droid_inner_with_rules(&input, &deny, &ask, &allow).is_none(),
+            "blocklisted command must step aside (no output)"
+        );
+    }
+
+    #[test]
+    fn test_droid_user_allowlist_replaces_defaults() {
+        // A user commandAllowlist replaces Droid's built-in default outright,
+        // so `git status` (default-allowed) drops back to no-decision.
+        let settings = json!({ "commandAllowlist": ["cargo test"] });
+        let (deny, ask, allow) = permissions::droid_rules_from_settings(Some(&settings));
+        let input = droid_input("Execute", "git status");
+        let out = run_droid_inner_with_rules(&input, &deny, &ask, &allow)
+            .expect("rewrite still expected");
+        let v: Value = serde_json::from_str(&out).unwrap();
+        assert!(
+            v.pointer("/hookSpecificOutput/permissionDecision")
+                .is_none(),
+            "user allowlist replaced the default — no auto-allow for git status"
         );
     }
 
