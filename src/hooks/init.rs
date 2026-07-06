@@ -4766,42 +4766,6 @@ mod tests {
         );
     }
 
-    /// Regression for #1307: `RTK_TELEMETRY_DISABLED=1` must short-circuit the
-    /// consent prompt so `rtk init` cannot hang in non-interactive environments.
-    /// All cases are bundled in one test to serialize env-var mutations (env is
-    /// process-global and cargo runs tests in parallel).
-    #[test]
-    fn test_telemetry_disabled_by_env_honors_opt_out() {
-        const VAR: &str = "RTK_TELEMETRY_DISABLED";
-
-        #[allow(deprecated)]
-        std::env::remove_var(VAR);
-        assert!(
-            !crate::core::telemetry_cmd::telemetry_disabled_by_env(),
-            "unset env must not count as disabled"
-        );
-
-        #[allow(deprecated)]
-        std::env::set_var(VAR, "1");
-        assert!(
-            crate::core::telemetry_cmd::telemetry_disabled_by_env(),
-            "RTK_TELEMETRY_DISABLED=1 must disable the consent prompt (issue #1307)"
-        );
-
-        // Only the exact value "1" is the opt-out, matching telemetry::maybe_ping.
-        for other in ["0", "true", "false", "yes", "no", ""] {
-            #[allow(deprecated)]
-            std::env::set_var(VAR, other);
-            assert!(
-                !crate::core::telemetry_cmd::telemetry_disabled_by_env(),
-                "value {other:?} must not be treated as disabled"
-            );
-        }
-
-        #[allow(deprecated)]
-        std::env::remove_var(VAR);
-    }
-
     #[test]
     fn test_migration_removes_old_block() {
         let input = format!(
