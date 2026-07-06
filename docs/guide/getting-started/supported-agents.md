@@ -147,7 +147,7 @@ rtk init --agent droid       # project-scoped (.factory/hooks.json, commit to sh
 
 Installs a `PreToolUse` hook (matcher `Execute`) into Droid's canonical `hooks.json` — falling back to the `hooks` key of `settings.json` only when that file already carries live `PreToolUse` hooks. Respects `$FACTORY_HOME_OVERRIDE`.
 
-RTK enforces Droid's own permission lists from `~/.factory/settings.json`, never another agent's settings: commands matching `commandAllowlist` (or Droid's built-in read-only defaults) are rewritten and auto-allowed; commands matching `commandDenylist` or `commandBlocklist` are left untouched so Droid's native confirmation or block fires on the original command.
+RTK honors Droid's own permission lists, never another agent's settings. Commands matching an explicit `commandDenylist` or `commandBlocklist` entry — read from all four settings scopes (`~/.factory/settings.json`, `~/.factory/settings.local.json`, `.factory/settings.json`, `.factory/settings.local.json`) — are left untouched so Droid's native confirmation or block fires on the original command. Every other command is rewritten via `updatedInput` with **no** permission decision: Droid's native flow (allowlist, autonomy level, other hooks) decides on the rewritten command. To auto-run rewritten read-only commands, add `rtk`-prefixed entries (e.g. `rtk git status`) to your `commandAllowlist`.
 
 Uninstall:
 
