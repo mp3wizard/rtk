@@ -13,11 +13,11 @@ use crate::hooks::constants::{
 };
 
 use super::constants::{
-    BEFORE_TOOL_KEY, CLAUDE_DIR, CLAUDE_HOOK_COMMAND, CODEX_DIR, CURSOR_HOOK_COMMAND,
-    GEMINI_HOOK_FILE, HERMES_DIR, HERMES_PLUGINS_SUBDIR, HERMES_PLUGIN_INIT_FILE,
-    HERMES_PLUGIN_MANIFEST_FILE, HERMES_PLUGIN_NAME, HOOKS_JSON, HOOKS_SUBDIR,
-    PI_CODING_AGENT_DIR_ENV, PI_DIR, PI_EXTENSIONS_SUBDIR, PI_LOCAL_DIR, PI_PLUGIN_FILE,
-    PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE, SETTINGS_JSON,
+    is_claude_hook_command, BEFORE_TOOL_KEY, CLAUDE_DIR, CLAUDE_HOOK_COMMAND, CODEX_DIR,
+    CURSOR_HOOK_COMMAND, GEMINI_HOOK_FILE, HERMES_DIR, HERMES_PLUGINS_SUBDIR,
+    HERMES_PLUGIN_INIT_FILE, HERMES_PLUGIN_MANIFEST_FILE, HERMES_PLUGIN_NAME, HOOKS_JSON,
+    HOOKS_SUBDIR, PI_CODING_AGENT_DIR_ENV, PI_DIR, PI_EXTENSIONS_SUBDIR, PI_LOCAL_DIR,
+    PI_PLUGIN_FILE, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE, SETTINGS_JSON,
 };
 use super::integrity;
 
@@ -1121,7 +1121,7 @@ fn hook_already_present(root: &serde_json::Value, hook_command: &str) -> bool {
         .flatten()
         .filter_map(|hook| hook.get("command")?.as_str())
         .any(|cmd| {
-            cmd == hook_command || cmd == CLAUDE_HOOK_COMMAND || cmd.contains(REWRITE_HOOK_FILE)
+            cmd == hook_command || is_claude_hook_command(cmd) || cmd.contains(REWRITE_HOOK_FILE)
         })
 }
 
@@ -5367,6 +5367,24 @@ mod tests {
                     "hooks": [{
                         "type": "command",
                         "command": CLAUDE_HOOK_COMMAND
+                    }]
+                }]
+            }
+        });
+
+        assert!(hook_already_present(&json_content, CLAUDE_HOOK_COMMAND));
+    }
+
+    #[test]
+    fn test_hook_already_present_absolute_new_command() {
+        let json_content = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Bash",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "/opt/homebrew/bin/rtk hook claude",
+                        "timeout": 5
                     }]
                 }]
             }
