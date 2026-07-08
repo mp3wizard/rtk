@@ -495,10 +495,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-07-04 |
+| Last audit | 2026-07-08 |
 | Status | PASSED |
-| Summary | 23 upstream commits merged; no vulnerabilities found — all unsafe blocks are legitimate signal handlers |
-| Report | [Security reports/security-audit-2026-07-04.md](Security%20reports/security-audit-2026-07-04.md) |
+| Summary | 31 upstream commits merged; no new vulnerabilities found — root Cargo.lock clean |
+| Report | [Security reports/security-audit-2026-07-08.md](Security%20reports/security-audit-2026-07-08.md) |
 
 ## Contributing
 
