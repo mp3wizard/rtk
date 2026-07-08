@@ -13,17 +13,6 @@ pub const CLAUDE_HOOK_COMMAND: &str = "rtk hook claude";
 /// Native Rust hook command for Cursor (replaces rtk-rewrite.sh).
 pub const CURSOR_HOOK_COMMAND: &str = "rtk hook cursor";
 
-pub fn is_claude_hook_command(command: &str) -> bool {
-    let parts = crate::discover::lexer::shell_split(command);
-    let [binary, hook, claude] = parts.as_slice() else {
-        return false;
-    };
-
-    let binary_name = binary.rsplit(['/', '\\']).next().unwrap_or(binary);
-
-    binary_name == "rtk" && hook == "hook" && claude == "claude"
-}
-
 pub const CONFIG_DIR: &str = ".config";
 pub const OPENCODE_SUBDIR: &str = "opencode";
 pub const PLUGIN_SUBDIR: &str = "plugins";
@@ -50,24 +39,3 @@ pub const HERMES_PLUGINS_SUBDIR: &str = "plugins";
 pub const HERMES_PLUGIN_NAME: &str = "rtk-rewrite";
 pub const HERMES_PLUGIN_INIT_FILE: &str = "__init__.py";
 pub const HERMES_PLUGIN_MANIFEST_FILE: &str = "plugin.yaml";
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn claude_hook_command_matches_bare_and_absolute_rtk() {
-        assert!(is_claude_hook_command("rtk hook claude"));
-        assert!(is_claude_hook_command("/opt/homebrew/bin/rtk hook claude"));
-        assert!(is_claude_hook_command(
-            "\"/opt/homebrew/bin/rtk\" hook claude"
-        ));
-    }
-
-    #[test]
-    fn claude_hook_command_rejects_other_commands() {
-        assert!(!is_claude_hook_command("not-rtk hook claude"));
-        assert!(!is_claude_hook_command("/opt/homebrew/bin/rtk hook cursor"));
-        assert!(!is_claude_hook_command("echo rtk hook claude"));
-    }
-}

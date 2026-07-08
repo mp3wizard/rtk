@@ -12,8 +12,9 @@
 //!
 //! Reference: SA-2025-RTK-001 (Finding F-01)
 
-use super::constants::{is_claude_hook_command, HOOKS_SUBDIR, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE};
+use super::constants::{HOOKS_SUBDIR, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE};
 use super::init::resolve_claude_dir;
+use super::is_claude_hook_command;
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::fs;

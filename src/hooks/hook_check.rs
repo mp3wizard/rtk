@@ -1,9 +1,8 @@
 //! Detects whether RTK hooks are installed and warns if they are outdated.
 
-use super::constants::{
-    is_claude_hook_command, HOOKS_SUBDIR, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE, SETTINGS_JSON,
-};
+use super::constants::{HOOKS_SUBDIR, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE, SETTINGS_JSON};
 use super::init::resolve_claude_dir;
+use super::is_claude_hook_command;
 use crate::core::constants::RTK_DATA_DIR;
 use std::path::PathBuf;
 
