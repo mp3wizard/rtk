@@ -499,10 +499,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-07-10 |
-| Status | PASSED |
-| Summary | 5 upstream commits merged; no vulnerabilities found — 36 gitleaks hits and 4 skill-audit flags all reviewed as false positives |
-| Report | [Security reports/security-audit-2026-07-10.md](Security%20reports/security-audit-2026-07-10.md) |
+| Last audit | 2026-07-20 |
+| Status | ISSUES FIXED |
+| Summary | 11 upstream commits merged; 2 CI/CD hygiene issues auto-fixed (dependabot cooldown, shell-injection-shaped interpolation); 6 findings reviewed and left unresolved (mutable action pins, `secrets: inherit` — need manual PR review; rest false positives) |
+| Report | [Security reports/security-audit-2026-07-20.md](Security%20reports/security-audit-2026-07-20.md) |
 
 ## Contributing
 
