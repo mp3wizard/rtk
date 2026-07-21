@@ -547,6 +547,7 @@ pub const RULES: &[RtkRule] = &[
     RtkRule {
         pattern: r"^sbt\s+(test|compile|run|clean|assembly|package)(?:\s|$)",
         rtk_cmd: "rtk sbt",
+        pipeline_final_safe: false,
         rewrite_prefixes: &["sbt"],
         category: "Build",
         savings_pct: 80.0,
