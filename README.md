@@ -501,10 +501,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-07-20 |
-| Status | ISSUES FIXED |
-| Summary | 11 upstream commits merged; 2 CI/CD hygiene issues auto-fixed (dependabot cooldown, shell-injection-shaped interpolation); 6 findings reviewed and left unresolved (mutable action pins, `secrets: inherit` — need manual PR review; rest false positives) |
-| Report | [Security reports/security-audit-2026-07-20.md](Security%20reports/security-audit-2026-07-20.md) |
+| Last audit | 2026-07-21 |
+| Status | PASSED |
+| Summary | 15 upstream commits merged; 0 new issues; 6 findings unchanged from 2026-07-20 (mutable action pins, `secrets: inherit` — need manual PR review; rest false positives) |
+| Report | [Security reports/security-audit-2026-07-21.md](Security%20reports/security-audit-2026-07-21.md) |
 
 ## Contributing
 
