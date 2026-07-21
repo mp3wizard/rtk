@@ -1,6 +1,6 @@
-use crate::core::tracking;
+use crate::core::runner::{self, RunOptions};
 use crate::core::utils::{resolved_command, truncate};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::ffi::OsString;
@@ -65,16 +65,23 @@ fn is_scoped_task(s: &str) -> bool {
     !s.starts_with('-') && (s.contains('/') || s.contains(':'))
 }
 
-pub fn run_test(args: &[String], verbose: u8) -> Result<()> {
-    let timer = tracking::TimedExecution::start();
-
+/// Run an SBT task through the shared runner (never_worse cap, tee hint, tracking,
+/// and exit-code propagation all handled centrally).
+///
+/// A scoped task passed as the first arg (e.g. `Test/test`, `exampleJVM/run`) is used
+/// verbatim so sbt runs the right configuration scope; otherwise `default_task` is used.
+fn run_task(
+    args: &[String],
+    default_task: &str,
+    filter: fn(&str) -> String,
+    tee_label: &str,
+    verbose: u8,
+) -> Result<i32> {
     let mut cmd = resolved_command("sbt");
 
-    // If caller passed a scoped task as first arg (e.g. "Test/test"), use it directly
-    // so sbt runs the right configuration scope.
     let (sbt_task, rest) = match args.first() {
         Some(a) if is_scoped_task(a) => (a.as_str(), &args[1..]),
-        _ => ("test", args),
+        _ => (default_task, args),
     };
     cmd.arg(sbt_task);
     for arg in rest {
@@ -85,198 +92,76 @@ pub fn run_test(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: sbt {} {}", sbt_task, rest.join(" "));
     }
 
-    let output = cmd
-        .output()
-        .context("Failed to run sbt test. Is SBT installed?")?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
-
-    let exit_code = output
-        .status
-        .code()
-        .unwrap_or(if output.status.success() { 0 } else { 1 });
-    let filtered = filter_sbt_test(&raw);
-    let shown = crate::core::runner::print_with_hint(&filtered, &raw, &raw, "sbt_test", exit_code);
-
-    timer.track(
-        &format!("sbt {} {}", sbt_task, rest.join(" ")),
-        &format!("rtk sbt {} {}", sbt_task, rest.join(" ")),
-        &raw,
-        &shown,
-    );
-
-    if !output.status.success() {
-        std::process::exit(exit_code);
-    }
-
-    Ok(())
-}
-
-pub fn run_compile(args: &[String], verbose: u8) -> Result<()> {
-    let timer = tracking::TimedExecution::start();
-
-    let mut cmd = resolved_command("sbt");
-
-    let (sbt_task, rest) = match args.first() {
-        Some(a) if is_scoped_task(a) => (a.as_str(), &args[1..]),
-        _ => ("compile", args),
+    let args_display = if rest.is_empty() {
+        sbt_task.to_string()
+    } else {
+        format!("{} {}", sbt_task, rest.join(" "))
     };
-    cmd.arg(sbt_task);
-    for arg in rest {
-        cmd.arg(arg);
-    }
 
-    if verbose > 0 {
-        eprintln!("Running: sbt {} {}", sbt_task, rest.join(" "));
-    }
-
-    let output = cmd
-        .output()
-        .context("Failed to run sbt compile. Is SBT installed?")?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
-
-    let exit_code = output
-        .status
-        .code()
-        .unwrap_or(if output.status.success() { 0 } else { 1 });
-    let filtered = filter_sbt_compile(&raw);
-    let shown =
-        crate::core::runner::print_with_hint(&filtered, &raw, &raw, "sbt_compile", exit_code);
-
-    timer.track(
-        &format!("sbt {} {}", sbt_task, rest.join(" ")),
-        &format!("rtk sbt {} {}", sbt_task, rest.join(" ")),
-        &raw,
-        &shown,
-    );
-
-    if !output.status.success() {
-        std::process::exit(exit_code);
-    }
-
-    Ok(())
+    runner::run_filtered(
+        cmd,
+        "sbt",
+        &args_display,
+        filter,
+        RunOptions::with_tee(tee_label),
+    )
 }
 
-pub fn run_run(args: &[String], verbose: u8) -> Result<()> {
-    let timer = tracking::TimedExecution::start();
-
-    let mut cmd = resolved_command("sbt");
-
-    // Preserve a scoped task passed as the first arg (e.g. `exampleJVM/run`) instead of
-    // forcing `sbt run <task>`, mirroring run_test / run_compile.
-    let (sbt_task, rest) = match args.first() {
-        Some(a) if is_scoped_task(a) => (a.as_str(), &args[1..]),
-        _ => ("run", args),
-    };
-    cmd.arg(sbt_task);
-    for arg in rest {
-        cmd.arg(arg);
-    }
-
-    if verbose > 0 {
-        eprintln!("Running: sbt {} {}", sbt_task, rest.join(" "));
-    }
-
-    let output = cmd
-        .output()
-        .context("Failed to run sbt run. Is SBT installed?")?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
-
-    let exit_code = output
-        .status
-        .code()
-        .unwrap_or(if output.status.success() { 0 } else { 1 });
-    let filtered = filter_sbt_run(&raw);
-    let shown = crate::core::runner::print_with_hint(&filtered, &raw, &raw, "sbt_run", exit_code);
-
-    timer.track(
-        &format!("sbt {} {}", sbt_task, rest.join(" ")),
-        &format!("rtk sbt {} {}", sbt_task, rest.join(" ")),
-        &raw,
-        &shown,
-    );
-
-    if !output.status.success() {
-        std::process::exit(exit_code);
-    }
-
-    Ok(())
+pub fn run_test(args: &[String], verbose: u8) -> Result<i32> {
+    run_task(args, "test", filter_sbt_test, "sbt_test", verbose)
 }
 
-pub fn run_other(args: &[OsString], verbose: u8) -> Result<()> {
+pub fn run_compile(args: &[String], verbose: u8) -> Result<i32> {
+    run_task(args, "compile", filter_sbt_compile, "sbt_compile", verbose)
+}
+
+pub fn run_run(args: &[String], verbose: u8) -> Result<i32> {
+    run_task(args, "run", filter_sbt_run, "sbt_run", verbose)
+}
+
+pub fn run_other(args: &[OsString], verbose: u8) -> Result<i32> {
     if args.is_empty() {
         anyhow::bail!("sbt: no subcommand specified");
     }
 
-    let timer = tracking::TimedExecution::start();
+    let subcommand = args[0].to_string_lossy().into_owned();
 
-    let subcommand = args[0].to_string_lossy();
-    let mut cmd = resolved_command("sbt");
-    cmd.arg(&*subcommand);
-
-    for arg in &args[1..] {
-        cmd.arg(arg);
-    }
-
-    if verbose > 0 {
-        eprintln!("Running: sbt {} ...", subcommand);
-    }
-
-    let output = cmd
-        .output()
-        .with_context(|| format!("Failed to run sbt {}", subcommand))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
-
-    let exit_code = output
-        .status
-        .code()
-        .unwrap_or(if output.status.success() { 0 } else { 1 });
-
-    // Integration test commands (it:test, IntegrationTest/test, etc.) produce
-    // standard ScalaTest output — apply the same filtering as `sbt test`.
+    // Integration test commands (it:test, IntegrationTest/test, etc.) produce standard
+    // ScalaTest output — filter them like `sbt test`, through the shared runner so the
+    // never_worse cap and tee hint apply (an unrecognized output would otherwise be
+    // reprinted verbatim plus the hint, i.e. more than the raw command produced).
     if is_integration_test_cmd(&subcommand) {
-        let filtered = filter_sbt_test(&raw);
-
-        if let Some(hint) = crate::core::tee::tee_and_hint(&raw, "sbt_it_test", exit_code) {
-            println!("{}\n{}", filtered, hint);
-        } else {
-            println!("{}", filtered);
+        let mut cmd = resolved_command("sbt");
+        cmd.arg(&subcommand);
+        for arg in &args[1..] {
+            cmd.arg(arg);
         }
 
-        timer.track(
-            &format!("sbt {}", subcommand),
-            &format!("rtk sbt {}", subcommand),
-            &raw,
-            &filtered,
-        );
-    } else {
-        print!("{}", stdout);
-        eprint!("{}", stderr);
+        if verbose > 0 {
+            eprintln!("Running: sbt {} ...", subcommand);
+        }
 
-        timer.track(
-            &format!("sbt {}", subcommand),
-            &format!("rtk sbt {}", subcommand),
-            &raw,
-            &raw,
+        let rest: Vec<String> = args[1..]
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let args_display = if rest.is_empty() {
+            subcommand
+        } else {
+            format!("{} {}", subcommand, rest.join(" "))
+        };
+
+        return runner::run_filtered(
+            cmd,
+            "sbt",
+            &args_display,
+            filter_sbt_test,
+            RunOptions::with_tee("sbt_it_test"),
         );
     }
 
-    if !output.status.success() {
-        std::process::exit(exit_code);
-    }
-
-    Ok(())
+    // Any other subcommand: pass through unfiltered (still tracked, exit code propagated).
+    runner::run_passthrough("sbt", args, verbose)
 }
 
 /// A single test failure with its name and detail lines captured from the output.

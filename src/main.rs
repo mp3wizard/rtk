@@ -2382,15 +2382,12 @@ fn run_cli() -> Result<i32> {
             GoCommands::Other(args) => go_cmd::run_other(&args, cli.verbose)?,
         },
 
-        Commands::Sbt { command } => {
-            match command {
-                SbtCommands::Test { args } => sbt_cmd::run_test(&args, cli.verbose)?,
-                SbtCommands::Compile { args } => sbt_cmd::run_compile(&args, cli.verbose)?,
-                SbtCommands::Run { args } => sbt_cmd::run_run(&args, cli.verbose)?,
-                SbtCommands::Other(args) => sbt_cmd::run_other(&args, cli.verbose)?,
-            }
-            0
-        }
+        Commands::Sbt { command } => match command {
+            SbtCommands::Test { args } => sbt_cmd::run_test(&args, cli.verbose)?,
+            SbtCommands::Compile { args } => sbt_cmd::run_compile(&args, cli.verbose)?,
+            SbtCommands::Run { args } => sbt_cmd::run_run(&args, cli.verbose)?,
+            SbtCommands::Other(args) => sbt_cmd::run_other(&args, cli.verbose)?,
+        },
 
         Commands::Gt { command } => match command {
             GtCommands::Log { args } => gt_cmd::run_log(&args, cli.verbose)?,
