@@ -3,8 +3,7 @@ use super::report::RtkStatus;
 pub struct RtkRule {
     pub pattern: &'static str,
     pub rtk_cmd: &'static str,
-    /// The wrapper can preserve stdin and exit-code semantics as a final pipeline stage.
-    /// Command-specific argument checks may further restrict eligibility.
+    /// Whether this command may be rewritten as the final pipeline stage.
     pub pipeline_final_safe: bool,
     pub rewrite_prefixes: &'static [&'static str],
     pub category: &'static str,
