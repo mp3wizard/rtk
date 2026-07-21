@@ -508,7 +508,7 @@ pub const RULES: &[RtkRule] = &[
     },
     // Scala/SBT
     RtkRule {
-        pattern: r"^sbt\s+(test|compile|run|clean|assembly|package)",
+        pattern: r"^sbt\s+(test|compile|run|clean|assembly|package)(?:\s|$)",
         rtk_cmd: "rtk sbt",
         rewrite_prefixes: &["sbt"],
         category: "Build",

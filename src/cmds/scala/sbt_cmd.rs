@@ -98,18 +98,13 @@ pub fn run_test(args: &[String], verbose: u8) -> Result<()> {
         .code()
         .unwrap_or(if output.status.success() { 0 } else { 1 });
     let filtered = filter_sbt_test(&raw);
-
-    if let Some(hint) = crate::core::tee::tee_and_hint(&raw, "sbt_test", exit_code) {
-        println!("{}\n{}", filtered, hint);
-    } else {
-        println!("{}", filtered);
-    }
+    let shown = crate::core::runner::print_with_hint(&filtered, &raw, &raw, "sbt_test", exit_code);
 
     timer.track(
         &format!("sbt {} {}", sbt_task, rest.join(" ")),
         &format!("rtk sbt {} {}", sbt_task, rest.join(" ")),
         &raw,
-        &filtered,
+        &shown,
     );
 
     if !output.status.success() {
@@ -150,22 +145,14 @@ pub fn run_compile(args: &[String], verbose: u8) -> Result<()> {
         .code()
         .unwrap_or(if output.status.success() { 0 } else { 1 });
     let filtered = filter_sbt_compile(&raw);
-
-    if let Some(hint) = crate::core::tee::tee_and_hint(&raw, "sbt_compile", exit_code) {
-        if !filtered.is_empty() {
-            println!("{}\n{}", filtered, hint);
-        } else {
-            println!("{}", hint);
-        }
-    } else if !filtered.is_empty() {
-        println!("{}", filtered);
-    }
+    let shown =
+        crate::core::runner::print_with_hint(&filtered, &raw, &raw, "sbt_compile", exit_code);
 
     timer.track(
         &format!("sbt {} {}", sbt_task, rest.join(" ")),
         &format!("rtk sbt {} {}", sbt_task, rest.join(" ")),
         &raw,
-        &filtered,
+        &shown,
     );
 
     if !output.status.success() {
@@ -179,14 +166,20 @@ pub fn run_run(args: &[String], verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
     let mut cmd = resolved_command("sbt");
-    cmd.arg("run");
 
-    for arg in args {
+    // Preserve a scoped task passed as the first arg (e.g. `exampleJVM/run`) instead of
+    // forcing `sbt run <task>`, mirroring run_test / run_compile.
+    let (sbt_task, rest) = match args.first() {
+        Some(a) if is_scoped_task(a) => (a.as_str(), &args[1..]),
+        _ => ("run", args),
+    };
+    cmd.arg(sbt_task);
+    for arg in rest {
         cmd.arg(arg);
     }
 
     if verbose > 0 {
-        eprintln!("Running: sbt run {}", args.join(" "));
+        eprintln!("Running: sbt {} {}", sbt_task, rest.join(" "));
     }
 
     let output = cmd
@@ -202,18 +195,13 @@ pub fn run_run(args: &[String], verbose: u8) -> Result<()> {
         .code()
         .unwrap_or(if output.status.success() { 0 } else { 1 });
     let filtered = filter_sbt_run(&raw);
-
-    if let Some(hint) = crate::core::tee::tee_and_hint(&raw, "sbt_run", exit_code) {
-        println!("{}\n{}", filtered, hint);
-    } else {
-        println!("{}", filtered);
-    }
+    let shown = crate::core::runner::print_with_hint(&filtered, &raw, &raw, "sbt_run", exit_code);
 
     timer.track(
-        &format!("sbt run {}", args.join(" ")),
-        &format!("rtk sbt run {}", args.join(" ")),
+        &format!("sbt {} {}", sbt_task, rest.join(" ")),
+        &format!("rtk sbt {} {}", sbt_task, rest.join(" ")),
         &raw,
-        &filtered,
+        &shown,
     );
 
     if !output.status.success() {
@@ -445,7 +433,7 @@ fn filter_sbt_test(output: &str) -> String {
             return result.trim().to_string();
         }
         if output.trim().is_empty() {
-            return "sbt test: No test output".to_string();
+            return String::new();
         }
         return output.to_string();
     }
@@ -520,6 +508,11 @@ fn filter_sbt_test(output: &str) -> String {
 /// On success: compact summary with source count and time.
 /// On failure: show all [error] lines.
 fn filter_sbt_compile(output: &str) -> String {
+    // Nothing in, nothing out (Transparency: never emit tokens the command didn't).
+    if output.trim().is_empty() {
+        return String::new();
+    }
+
     let mut source_count: u32 = 0;
     let mut total_time_secs: Option<u32> = None;
     let mut error_lines: Vec<String> = Vec::new();
@@ -917,15 +910,14 @@ mod tests {
 
     #[test]
     fn test_filter_sbt_test_empty_input() {
-        let output = filter_sbt_test("");
-        assert!(!output.is_empty());
+        // Empty command output must produce empty filtered output (guard::never_worse
+        // invariant): RTK never emits tokens the underlying command didn't.
+        assert!(filter_sbt_test("").is_empty());
     }
 
     #[test]
     fn test_filter_sbt_compile_empty_input() {
-        let output = filter_sbt_compile("");
-        assert!(output.contains("sbt compile:"));
-        assert!(output.contains("Success"));
+        assert!(filter_sbt_compile("").is_empty());
     }
 
     #[test]
