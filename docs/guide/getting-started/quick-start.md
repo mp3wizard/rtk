@@ -73,7 +73,7 @@ Output tokens  : 4,890
 Saved          : 40,340  (89.2%)
 ```
 
-The token figures are estimates: RTK counts `bytes / 4`, not real tokenizer output. The percentage is a reduction in **bash output bytes**, which is one contributor to input tokens — not a percentage off your bill. See [How RTK Savings Work](../resources/savings-explained.md).
+The token figures are estimates: RTK counts `bytes / 4`, not real tokenizer output. The percentage is a reduction in **bash output bytes**, which is one contributor to input tokens, not a percentage off your bill.
 
 ## Step 4: Unsupported commands
 

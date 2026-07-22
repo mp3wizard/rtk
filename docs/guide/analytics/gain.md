@@ -113,7 +113,7 @@ Same columns as daily, aggregated by Sunday-Saturday week or calendar month.
 | `pnpm list` | 70-90% | Compact dependencies |
 | `grep` | 70% | Truncate + group |
 
-These percentages measure bash output bytes removed, not cost reduction. See [How RTK Savings Work](../resources/savings-explained.md).
+These percentages measure bash output bytes removed, not cost reduction.
 
 ## How token estimation works
 

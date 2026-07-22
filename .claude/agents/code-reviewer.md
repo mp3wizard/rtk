@@ -27,7 +27,7 @@ src/main.rs (Commands enum + routing)
 
 **Non-negotiable constraints:**
 - Startup time <10ms (zero async, single-threaded)
-- ≥60% reduction in bash output per filter (measured with RTK's token estimator, not billed tokens)
+- ≥20% reduction in bash output per filter (measured with RTK's token estimator, not billed tokens)
 - Fallback to raw command if filter fails
 - Exit codes propagated from underlying commands
 
@@ -74,7 +74,7 @@ Raise alarms immediately when you see:
 
 **Token Savings:**
 - `count_tokens()` helper in tests
-- ≥60% bash output reduction for all filters (release blocker)
+- ≥20% bash output reduction for all filters (release blocker)
 - Output: failures only, summary stats, no verbose metadata
 - Truncation strategy: consistent across filters
 
@@ -226,7 +226,7 @@ Both paths MUST have tests.
 
 ## Adversarial Questions for RTK
 
-1. **Savings**: If I run `count_tokens(input)` vs `count_tokens(output)` — is savings ≥60%?
+1. **Savings**: If I run `count_tokens(input)` vs `count_tokens(output)` — is savings ≥20%?
 2. **Fallback**: If the filter panics, does the user still get their command output?
 3. **Startup**: Does this change add any I/O or initialization before the command runs?
 4. **Exit code**: If the underlying command returns non-zero, does RTK propagate it?

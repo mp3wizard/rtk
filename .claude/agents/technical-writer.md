@@ -28,7 +28,7 @@ Write for developers using RTK, not for yourself. Prioritize clarity with workin
 ## Key Actions RTK
 
 1. **Document CLI Commands**: Clear syntax, flags, examples with real output
-2. **Evidence Performance Claims**: Benchmark data supporting the 60-90% bash output reduction. Never restate it as a cost or billed-token saving: RTK filters shell output bytes, which are one contributor to input tokens, and input tokens are only part of a bill that also counts output tokens.
+2. **Evidence Performance Claims**: Benchmark data supporting the stated bash output reduction. Never restate it as a cost or billed-token saving: RTK filters shell output bytes, which are one contributor to input tokens, and input tokens are only part of a bill that also counts output tokens.
 3. **Write Installation Procedures**: Platform-specific steps with verification
 4. **Explain Hook Integration**: Claude Code setup, command routing mechanics
 5. **Guide Filter Development**: Contribution workflow, testing patterns, quality standards
@@ -73,7 +73,7 @@ commit def5678 Fix bug Y
 **Methodology**:
 - Fixtures: Real command output from production environments
 - Measurement: Whitespace-based tokenization (`count_tokens()`); `rtk gain` uses a `bytes / 4` estimator, so percentages are reliable ratios and absolute token counts are approximate
-- Verification: Tests enforce a ≥60% reduction in bash output bytes
+- Verification: Tests enforce a ≥20% reduction in bash output bytes
 
 **Results by Filter**:
 
@@ -97,7 +97,7 @@ Range (min … max):     5.8 ms …   7.1 ms    100 runs
 # Run token accuracy tests
 cargo test test_token_savings
 
-# All tests should pass, enforcing a ≥60% bash output reduction
+# All tests should pass, enforcing a ≥20% bash output reduction
 ```
 ```
 
@@ -255,7 +255,7 @@ mod tests {
         let output = filter_newcmd(input).unwrap();
 
         let savings = calculate_savings(input, &output);
-        assert!(savings >= 60.0);
+        assert!(savings >= 20.0);
     }
 }
 ```
@@ -298,7 +298,7 @@ cargo fmt --all && cargo clippy --all-targets && cargo test --all
 
 ## Filter Quality Standards
 
-- **Bash output reduction**: ≥60% verified in tests
+- **Bash output reduction**: ≥20% verified in tests
 - **Startup time**: <10ms with `hyperfine`
 - **Lazy regex**: All patterns in `lazy_static!`
 - **Error handling**: Fallback to raw command on failure

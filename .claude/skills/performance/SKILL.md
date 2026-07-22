@@ -4,7 +4,7 @@ description: CLI performance optimization - startup time, memory usage, bash out
 
 # Performance Optimization Skill
 
-Systematic performance analysis and optimization for RTK CLI tool, focusing on **startup time (<10ms)**, **memory usage (<5MB)**, and **bash output reduction (60-90%)**.
+Systematic performance analysis and optimization for RTK CLI tool, focusing on **startup time (<10ms)**, **memory usage (<5MB)**, and **bash output reduction (≥20% floor)**.
 
 ## When to Use
 
@@ -18,7 +18,7 @@ Systematic performance analysis and optimization for RTK CLI tool, focusing on *
 |--------|--------|---------------------|-------------------|
 | **Startup time** | <10ms | `hyperfine 'rtk <cmd>'` | >15ms = blocker |
 | **Memory usage** | <5MB resident | `/usr/bin/time -l rtk <cmd>` (macOS) | >7MB = blocker |
-| **Bash output reduction** | 60-90% | Tests with `count_tokens()` (bytes/4 estimator) | <60% = blocker |
+| **Bash output reduction** | ≥20% (floor) | Tests with `count_tokens()` (bytes/4 estimator) | <20% = blocker |
 | **Binary size** | <5MB stripped | `ls -lh target/release/rtk` | >8MB = investigate |
 
 ## Performance Analysis Workflow
@@ -112,13 +112,13 @@ cargo install dhat
 # static ALLOC: dhat::Alloc = dhat::Alloc;
 ```
 
-**Bash output reduction regression** (<60%):
+**Bash output reduction regression** (<20%):
 ```bash
 # Run token accuracy tests
 cargo test test_token_savings
 
 # Example failure output:
-# Git log filter: expected ≥60% savings, got 52.3%
+# Git log filter: expected ≥20% savings, got 12.3%
 
 # Fix: Improve filter condensation logic
 ```
@@ -331,7 +331,7 @@ Before committing filter changes:
 
 ### Bash Output Reduction
 - [ ] Run `cargo test test_token_savings`
-- [ ] Verify all filters achieve ≥60% bash output reduction
+- [ ] Verify all filters achieve ≥20% bash output reduction
 - [ ] Check real fixtures used (not synthetic)
 
 ### Binary Size

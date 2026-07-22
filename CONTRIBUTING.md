@@ -73,7 +73,7 @@ If you want to submit a new core feature, this is an important point to watch.
 
 ### In Scope
 
-Commands that produce **text output** (typically 100+ tokens) whose bytes can be compressed **60%+** without losing essential information for the LLM.
+Commands that produce **text output** (typically 100+ tokens) whose bytes can be compressed **20%+** without losing essential information for the LLM. See [Correctness VS Token Savings](#correctness-vs-token-savings).
 
 - Test runners (vitest, pytest, cargo test, go test)
 - Linters and type checkers (eslint, ruff, tsc, mypy)
@@ -265,7 +265,7 @@ cargo fmt --all --check && cargo clippy --all-targets && cargo test
 
 - [ ] Unit tests added/updated for changed code
 - [ ] Snapshot tests for filters
-- [ ] >=60% reduction in bash output verified (measured with RTK's token estimator, not a real tokenizer)
+- [ ] >=20% reduction in bash output verified (measured with RTK's token estimator, not a real tokenizer)
 - [ ] Any truncated list has a recovery hint (`force_tee_tail_hint` or `force_tee_hint`) and uses a `CAP_*` from `src/core/truncate.rs`
 - [ ] Edge cases covered
 - [ ] `cargo fmt --all --check && cargo clippy --all-targets && cargo test` passes

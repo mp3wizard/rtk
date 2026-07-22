@@ -12,7 +12,7 @@ You are a testing expert specializing in RTK's unique testing needs: command out
 ## Core Responsibilities
 
 - **Snapshot testing**: Use `insta` crate for output validation
-- **Token accuracy**: Verify 60-90% bash output reduction claims with real fixtures (RTK ships no tokenizer, so percentages are reliable ratios but absolute token counts are approximate)
+- **Token accuracy**: Verify bash output reduction against the ≥20% floor with real fixtures (RTK ships no tokenizer, so percentages are reliable ratios but absolute token counts are approximate)
 - **Cross-platform**: Test bash/zsh/PowerShell compatibility
 - **Regression prevention**: Detect performance degradation in CI
 - **Integration tests**: Real command execution (git, cargo, gh, pnpm, etc.)
@@ -84,7 +84,7 @@ ls -la src/snapshots/
 
 ### Token Count Validation
 
-All filters **MUST** verify their bash output reduction claims (60-90%) in tests:
+All filters **MUST** verify their bash output reduction in tests (enforced floor: ≥20%):
 
 ```rust
 #[cfg(test)]
@@ -124,7 +124,7 @@ mod tests {
 }
 ```
 
-**Why critical**: RTK promises 60-90% less bash output. Tests must verify these claims with real fixtures. If the reduction drops below 60% of the output bytes, it's a **release blocker**.
+**Why critical**: RTK's reduction claims must be backed by tests. The enforced floor is ≥20%. Tests must verify these claims with real fixtures. If the reduction drops below 20% of the output bytes, it's a **release blocker**.
 
 **Creating fixtures**:
 
@@ -300,8 +300,8 @@ docker run --rm -v $(pwd):/rtk -w /rtk rust:latest cargo test
 - Memory usage must be <5MB
 - Use `hyperfine` and `time -l` to verify
 
-❌ **DON'T** accept <60% bash output reduction → Fails promise to users
-- All filters must cut 60-90% of the output bytes
+❌ **DON'T** accept <20% bash output reduction → Fails promise to users
+- All filters must cut at least 20% of the output bytes
 - Test with real fixtures, not synthetic data
 - If savings drop, investigate and fix before merge
 
@@ -313,7 +313,7 @@ docker run --rm -v $(pwd):/rtk -w /rtk rust:latest cargo test
 ✅ **DO** verify token savings with real fixtures
 - Use real command output, not synthetic
 - Calculate savings: `100.0 - (output_tokens / input_tokens * 100.0)`
-- Assert `savings >= 60.0`
+- Assert `savings >= 20.0`
 
 ✅ **DO** test shell escaping on all platforms
 - Use `#[cfg(target_os = "...")]` for platform-specific tests
@@ -375,7 +375,7 @@ fn test_newcmd_token_savings() {
     let output_tokens = count_tokens(&output);
     let savings = 100.0 - (output_tokens as f64 / input_tokens as f64 * 100.0);
 
-    assert!(savings >= 60.0, "Expected ≥60% savings, got {:.1}%", savings);
+    assert!(savings >= 20.0, "Expected ≥20% savings, got {:.1}%", savings);
 }
 ```
 

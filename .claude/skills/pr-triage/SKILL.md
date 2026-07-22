@@ -228,7 +228,7 @@ prompt: |
   - anyhow::Result + .context() (no unwrap())
   - Fallback to raw command on filter failure
   - Exit code propagation
-  - Bash output reduction ≥60% in tests with real fixtures
+  - Bash output reduction ≥20% in tests with real fixtures
   - No async/tokio dependencies
 
   Return structured review:

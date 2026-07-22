@@ -181,5 +181,5 @@ Before adding code to a module, check `utils.rs`:
 **Will not:**
 - Implement the full filter logic (→ rust-rtk agent)
 - Write the actual regex patterns (→ implementation detail)
-- Make decisions about savings targets (→ fixed at ≥60% reduction in bash output)
+- Make decisions about savings targets (→ fixed at ≥20% reduction in bash output)
 - Override the <10ms startup constraint (→ non-negotiable)
