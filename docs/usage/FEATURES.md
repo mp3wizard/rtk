@@ -8,16 +8,6 @@ Binaire Rust unique, zero dependances externes, overhead < 10ms par commande.
 
 Tous les pourcentages notes **Reduction sortie bash** dans ce document mesurent les **octets de sortie bash supprimes** : la sortie qu'une commande shell renvoie avant que l'agent ne la lise. Ce n'est pas equivalent a une reduction de facture du meme ordre.
 
-```
-Cout
-├─ Tokens d'entree
-│  ├─ Sortie bash                <- la seule partie filtree par RTK
-│  ├─ Votre prompt
-│  ├─ Prompt systeme
-│  └─ Historique de conversation
-└─ Tokens de sortie              <- ce que le modele ecrit
-```
-
 La sortie bash n'est qu'une source parmi d'autres pour les tokens d'entree, aux cotes de votre prompt, du prompt systeme et de l'historique de conversation. Les tokens d'entree ne representent eux-memes qu'une partie de la facture, qui compte aussi les tokens de sortie. La reduction se dilue a chaque etape.
 
 Les compteurs de tokens affiches par RTK sont estimes a `octets / 4` : RTK n'embarque pas de tokenizer, donc **les pourcentages sont fiables mais les nombres absolus de tokens sont approximatifs**.

@@ -2,19 +2,9 @@
 
 Comprehensive documentation for RTK's tracking system, which records how much **bash output** each filtered command removed.
 
-Everything the tracker stores is measured on bash output bytes, converted to estimated tokens:
+Everything the tracker stores is measured on bash output bytes, converted to estimated tokens. Bash output is one contributor to input tokens, alongside your prompt, the system prompt and conversation history, and input tokens are in turn only part of the bill, which also counts output tokens. `savings_pct` is therefore a **bash output byte ratio** — not a cost figure and not a share of your token bill.
 
-```
-Cost
-├─ Input tokens
-│  ├─ Bash output           <- the only part RTK filters
-│  ├─ Your prompt
-│  ├─ System prompt
-│  └─ Conversation history
-└─ Output tokens            <- what the model writes
-```
-
-Bash output is one contributor to input tokens, alongside your prompt, the system prompt and conversation history. Input tokens are in turn only part of the bill, which also counts output tokens. `savings_pct` is therefore a **bash output byte ratio** — not a cost figure and not a share of your token bill.
+See [How RTK Savings Work](../guide/resources/savings-explained.md) for the full breakdown.
 
 ## Table of Contents
 

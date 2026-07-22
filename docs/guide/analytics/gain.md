@@ -9,19 +9,7 @@ sidebar:
 
 `rtk gain` shows how much bash output RTK has removed across all your commands, with daily, weekly, and monthly breakdowns.
 
-What `rtk gain` measures is the reduction in **bash output bytes**, converted to estimated tokens:
-
-```
-Cost
-├─ Input tokens
-│  ├─ Bash output           <- the only part RTK filters
-│  ├─ Your prompt
-│  ├─ System prompt
-│  └─ Conversation history
-└─ Output tokens            <- what the model writes
-```
-
-Bash output is one contributor to input tokens, alongside your prompt, the system prompt and conversation history. Input tokens are in turn only part of the bill, which also counts output tokens. See [How RTK Savings Work](../resources/savings-explained.md) for the full picture.
+What `rtk gain` measures is the reduction in **bash output bytes**, converted to estimated tokens. Bash output is one contributor to input tokens, alongside your prompt, the system prompt and conversation history, and input tokens are in turn only part of the bill, which also counts output tokens. See [How RTK Savings Work](../resources/savings-explained.md) for the full picture.
 
 ## Quick reference
 

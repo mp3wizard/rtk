@@ -58,16 +58,6 @@ RTK intercepta comandos de shell y comprime su salida antes de que tu agente la 
 
 RTK elimina **hasta el 90% de la salida bash** que lee tu agente. Eso es lo que RTK mide, y no es lo mismo que reducir tu factura en un 90%.
 
-```
-Coste
-├─ Tokens de entrada
-│  ├─ Salida bash                 <- la unica parte que RTK filtra
-│  ├─ Tu prompt
-│  ├─ Prompt del sistema
-│  └─ Historial de conversacion
-└─ Tokens de salida               <- lo que escribe el modelo
-```
-
 La salida bash es **uno de los factores que alimentan los tokens de entrada**, junto con tu prompt, el prompt del sistema y el historial de conversacion. Los tokens de entrada son a su vez **solo una parte de la factura**, que tambien cuenta los tokens de salida. La reduccion se diluye en cada paso.
 
 Los recuentos de tokens que reporta RTK se estiman como `bytes / 4`: RTK no incluye ningun tokenizador, por lo que los **porcentajes son fiables pero las cifras absolutas de tokens son aproximadas**.
