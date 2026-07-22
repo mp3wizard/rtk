@@ -114,7 +114,7 @@ RTK_DISABLED=1 git rebase main
 
 RTK sends one anonymous ping per day (23h interval). No personal data, no file paths, no command content.
 
-Data sent: device hash, version, OS, architecture, command count/24h, top commands, bash output reduction %.
+Data sent: device hash, version, OS, architecture, command count/24h, top commands, savings %.
 
 To opt out:
 

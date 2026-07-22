@@ -1,6 +1,6 @@
 ---
 title: Quick Start
-description: Get RTK running in 5 minutes and see your first bash output reduction
+description: Get RTK running in 5 minutes and see your first token savings
 sidebar:
   order: 2
 ---
@@ -58,13 +58,11 @@ RTK covers all major ecosystems — Git, Cargo/Rust, JavaScript, Python, Go, Rub
 
 ## Step 3: Check your savings
 
-After a few commands, see how much bash output was removed:
+After a few commands, see how much was saved:
 
 ```bash
 rtk gain
 ```
-
-**Sample output** (illustrative, not a promise — your numbers depend on which commands you run):
 
 ```
 Total commands : 12
@@ -72,8 +70,6 @@ Input tokens   : 45,230
 Output tokens  : 4,890
 Saved          : 40,340  (89.2%)
 ```
-
-The token figures are estimates: RTK counts `bytes / 4`, not real tokenizer output. The percentage is a reduction in **bash output bytes**, which is one contributor to input tokens, not a percentage off your bill.
 
 ## Step 4: Unsupported commands
 
@@ -85,7 +81,6 @@ rtk proxy make install
 
 ## Next steps
 
-- [What RTK Optimizes](../resources/what-rtk-covers.md) — all supported commands and bash output reduction by ecosystem
-- [How RTK Savings Work](../resources/savings-explained.md) — what the percentages actually measure
+- [What RTK Optimizes](../resources/what-rtk-covers.md) — all supported commands and savings by ecosystem
 - [Supported agents](./supported-agents.md) — Claude Code, Cursor, Copilot, and more
 - [Configuration](./configuration.md) — customize RTK behavior

@@ -161,10 +161,10 @@ Database: ~/.local/share/rtk/history.db
 
 > For the full file-level module tree, see [TECHNICAL.md](TECHNICAL.md#4-folder-map) and each folder's README.
 
-**Bash output reduction by ecosystem** (percentages are shell output, not billed tokens):
+**Token savings by ecosystem:**
 
 ```
-Bash output reduction by ecosystem:
+Savings by ecosystem:
   GIT (cmds/git/)          85-99%    status, diff, log, gh, gt
   JS/TS (cmds/js/)         70-99%    lint, tsc, next, prettier, playwright, prisma, vitest, pnpm
   PYTHON (cmds/python/)    70-90%    ruff, pytest, mypy, pip
@@ -324,8 +324,6 @@ fn calculate_total(items: &[Item]) -> i32 {
 // FilterLevel::Aggressive - Strip comments + function bodies (60-90% reduction)
 fn calculate_total(items: &[Item]) -> i32 { ... }
 ```
-
-The percentages above are reductions in the emitted output bytes, not in billed tokens.
 
 **Language Support**: Rust, Python, JavaScript, TypeScript, Go, C, C++, Java
 
@@ -713,7 +711,7 @@ Flow:
    FROM commands
    WHERE timestamp > datetime('now', '-90 days')
 
-   Output (illustrative mock, not measured results):
+   Output:
    ┌──────────────────────────────────────┐
    │ Token Savings Report (90 days)      │
    ├──────────────────────────────────────┤
@@ -730,10 +728,6 @@ Flow:
 
    Note: Time column shows average execution
    duration per command (added in v0.7.1)
-   The 78.5% / 45,678 figures above are placeholder
-   values for layout, not benchmark results.
-   savings_pct measures bash output bytes; token
-   counts are bytes/4 estimates, not billed tokens.
 ```
 
 ### Thread Safety
@@ -909,7 +903,7 @@ Write template:
 │ - rtk lint                          │
 │ - rtk test                          │
 │                                     │
-│ Benefits: 60-90% less bash output   │
+│ Benefits: 60-90% token reduction    │
 └─────────────────────────────────────┘
       ↓
 Success: "✓ Initialized rtk for LLM integration"

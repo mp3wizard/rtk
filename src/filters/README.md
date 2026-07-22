@@ -9,7 +9,7 @@ Files are concatenated alphabetically by `build.rs` into a single TOML blob embe
 
 TOML filters strip noise lines — they don't reformat output. The filtered result must still look like real command output (see [Design Philosophy](../../CONTRIBUTING.md#design-philosophy)). For the full TOML-vs-Rust decision criteria, see [CONTRIBUTING.md](../../CONTRIBUTING.md#toml-vs-rust-which-one).
 
-TOML works well for commands with **predictable, line-by-line text output** where regex filtering cuts 60%+ of the output bytes:
+TOML works well for commands with **predictable, line-by-line text output** where regex filtering achieves 60%+ savings:
 - Install/update logs (brew, composer, poetry) — strip `Using ...` / `Already installed` lines
 - System monitoring (df, ps, systemctl) — keep essential rows, drop headers/decorations
 - Simple linters (shellcheck, yamllint, hadolint) — strip context, keep findings

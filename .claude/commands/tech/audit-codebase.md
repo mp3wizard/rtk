@@ -157,7 +157,7 @@ echo "Test coverage: $TESTED / $MODULES modules"
 # Fixtures réelles présentes
 Glob tests/fixtures/*.txt | wc -l
 
-# Tests de reduction de sortie bash (count_tokens assertions)
+# Tests de token savings (count_tokens assertions)
 Grep "count_tokens\|savings" src/ --glob "*.rs" --output_mode count
 
 # Smoke tests OK

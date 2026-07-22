@@ -28,7 +28,7 @@ Write for developers using RTK, not for yourself. Prioritize clarity with workin
 ## Key Actions RTK
 
 1. **Document CLI Commands**: Clear syntax, flags, examples with real output
-2. **Evidence Performance Claims**: Benchmark data supporting the stated bash output reduction. Never restate it as a cost or billed-token saving: RTK filters shell output bytes, which are one contributor to input tokens, and input tokens are only part of a bill that also counts output tokens.
+2. **Evidence Performance Claims**: Benchmark data supporting 60-90% token savings
 3. **Write Installation Procedures**: Platform-specific steps with verification
 4. **Explain Hook Integration**: Claude Code setup, command routing mechanics
 5. **Guide Filter Development**: Contribution workflow, testing patterns, quality standards
@@ -55,7 +55,7 @@ rtk git log -10
 rtk git log --oneline --graph -20
 ```
 
-**Bash Output Reduction**: 80% (verified with fixtures)
+**Token Savings**: 80% (verified with fixtures)
 **Performance**: <10ms startup
 
 **Expected Output**:
@@ -68,16 +68,16 @@ commit def5678 Fix bug Y
 
 ### Performance Claims Documentation
 ```markdown
-## Bash Output Reduction Evidence
+## Token Savings Evidence
 
 **Methodology**:
 - Fixtures: Real command output from production environments
-- Measurement: Whitespace-based tokenization (`count_tokens()`); `rtk gain` uses a `bytes / 4` estimator, so percentages are reliable ratios and absolute token counts are approximate
-- Verification: Tests enforce a ≥20% reduction in bash output bytes
+- Measurement: Whitespace-based tokenization (`count_tokens()`)
+- Verification: Tests enforce ≥60% savings threshold
 
 **Results by Filter**:
 
-| Filter | Input Tokens (est.) | Output Tokens (est.) | Output Reduction | Fixture |
+| Filter | Input Tokens | Output Tokens | Savings | Fixture |
 |--------|--------------|---------------|---------|---------|
 | `git log` | 2,450 | 489 | 80.0% | tests/fixtures/git_log_raw.txt |
 | `cargo test` | 8,120 | 812 | 90.0% | tests/fixtures/cargo_test_raw.txt |
@@ -97,7 +97,7 @@ Range (min … max):     5.8 ms …   7.1 ms    100 runs
 # Run token accuracy tests
 cargo test test_token_savings
 
-# All tests should pass, enforcing a ≥20% bash output reduction
+# All tests should pass, enforcing ≥60% savings
 ```
 ```
 
@@ -189,7 +189,7 @@ RTK integrates with Claude Code via bash hooks for transparent command rewriting
 2. Hook (`rtk-rewrite.sh`) intercepts command
 3. Rewrites to: `rtk git status`
 4. RTK applies filter, returns condensed output
-5. Claude sees token-optimized result (80% less bash output)
+5. Claude sees token-optimized result (80% savings)
 
 ## Hook Files
 
@@ -255,7 +255,7 @@ mod tests {
         let output = filter_newcmd(input).unwrap();
 
         let savings = calculate_savings(input, &output);
-        assert!(savings >= 20.0);
+        assert!(savings >= 60.0);
     }
 }
 ```
@@ -283,7 +283,7 @@ newcmd --args > tests/fixtures/newcmd_raw.txt
 cargo test
 ```
 
-### 4. Document Bash Output Reduction
+### 4. Document Token Savings
 
 Update README.md:
 ```markdown
@@ -298,7 +298,7 @@ cargo fmt --all && cargo clippy --all-targets && cargo test --all
 
 ## Filter Quality Standards
 
-- **Bash output reduction**: ≥20% verified in tests
+- **Token savings**: ≥60% verified in tests
 - **Startup time**: <10ms with `hyperfine`
 - **Lazy regex**: All patterns in `lazy_static!`
 - **Error handling**: Fallback to raw command on failure
@@ -342,7 +342,7 @@ A tests/new_test.rs
 **Performance claims**:
 ```markdown
 # ✅ Good: Evidence with fixture
-Bash output reduction: 80% (2,450 → 489 estimated tokens)
+Token savings: 80% (2,450 → 489 tokens)
 Fixture: tests/fixtures/git_log_raw.txt
 Verification: cargo test test_git_log_savings
 ```

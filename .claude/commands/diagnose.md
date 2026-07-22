@@ -13,7 +13,7 @@ Vérifie l'état de l'environnement RTK et suggère des corrections.
   - `rtk: command not found` → RTK non installé ou pas dans PATH
   - Hook errors in Claude Code → Hooks mal configurés ou non exécutables
   - `Unknown command` dans RTK → Version incompatible ou commande non supportée
-  - Savings dashboard missing → `rtk gain` not working
+  - Token savings reports missing → `rtk gain` not working
   - Command routing errors → Hook integration broken
 
 - **Manuellement** après installation, mise à jour RTK, ou si comportement suspect
@@ -94,7 +94,7 @@ fi
 # Run rtk gain to verify analytics work
 if command -v rtk >/dev/null 2>&1; then
     echo ""
-    echo "📊 Bash output reduction (last 5 commands):"
+    echo "📊 Token Savings (last 5 commands):"
     rtk gain --history 2>&1 | head -8 || echo "⚠️ rtk gain failed"
 else
     echo "⚠️ Cannot test rtk gain (binary not installed)"

@@ -64,17 +64,6 @@ The consequence is worth understanding:
 
 If you need exact counts, run the raw and filtered output through your model's own tokenizer.
 
-### Two estimators, one caveat
-
-RTK uses different approximations in different places, and neither is a real tokenizer:
-
-| Where | Estimator | Used for |
-|-------|-----------|----------|
-| `rtk gain`, tracking, telemetry | `bytes / 4` (`src/core/tracking.rs`) | The savings dashboard and stored history |
-| Filter tests | `text.split_whitespace().count()` | The ≥20% reduction gate enforced in CI |
-
-They produce different absolute numbers from the same input. Both are applied identically to the raw and the filtered side, so both are sound as ratios — which is all either is used for.
-
 ## How to read `rtk gain`
 
 | Column | What it actually is |

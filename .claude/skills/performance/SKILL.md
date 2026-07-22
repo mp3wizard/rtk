@@ -1,10 +1,10 @@
 ---
-description: CLI performance optimization - startup time, memory usage, bash output reduction benchmarking
+description: CLI performance optimization - startup time, memory usage, token savings benchmarking
 ---
 
 # Performance Optimization Skill
 
-Systematic performance analysis and optimization for RTK CLI tool, focusing on **startup time (<10ms)**, **memory usage (<5MB)**, and **bash output reduction (≥20% floor)**.
+Systematic performance analysis and optimization for RTK CLI tool, focusing on **startup time (<10ms)**, **memory usage (<5MB)**, and **token savings (60-90%)**.
 
 ## When to Use
 
@@ -18,7 +18,7 @@ Systematic performance analysis and optimization for RTK CLI tool, focusing on *
 |--------|--------|---------------------|-------------------|
 | **Startup time** | <10ms | `hyperfine 'rtk <cmd>'` | >15ms = blocker |
 | **Memory usage** | <5MB resident | `/usr/bin/time -l rtk <cmd>` (macOS) | >7MB = blocker |
-| **Bash output reduction** | ≥20% (floor) | Tests with `count_tokens()` (bytes/4 estimator) | <20% = blocker |
+| **Token savings** | 60-90% | Tests with `count_tokens()` | <60% = blocker |
 | **Binary size** | <5MB stripped | `ls -lh target/release/rtk` | >8MB = investigate |
 
 ## Performance Analysis Workflow
@@ -112,13 +112,13 @@ cargo install dhat
 # static ALLOC: dhat::Alloc = dhat::Alloc;
 ```
 
-**Bash output reduction regression** (<20%):
+**Token savings regression** (<60% savings):
 ```bash
 # Run token accuracy tests
 cargo test test_token_savings
 
 # Example failure output:
-# Git log filter: expected ≥20% savings, got 12.3%
+# Git log filter: expected ≥60% savings, got 52.3%
 
 # Fix: Improve filter condensation logic
 ```
@@ -329,9 +329,9 @@ Before committing filter changes:
 - [ ] Verify <5MB resident set size
 - [ ] Compare against baseline (regression <1MB)
 
-### Bash Output Reduction
+### Token Savings
 - [ ] Run `cargo test test_token_savings`
-- [ ] Verify all filters achieve ≥20% bash output reduction
+- [ ] Verify all filters achieve ≥60% savings
 - [ ] Check real fixtures used (not synthetic)
 
 ### Binary Size

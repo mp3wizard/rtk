@@ -55,7 +55,7 @@ else
     echo ""
     echo "Expected behavior:"
     echo "  - Command executed without RTK filtering"
-    echo "  - Full command output (no filtering)"
+    echo "  - Full command output (no token savings)"
     echo "  - Original command behavior unchanged"
 fi
 ```
@@ -111,23 +111,23 @@ if [[ " ${RTK_COMMANDS[@]} " =~ " ${COMMAND} " ]]; then
     case "$COMMAND" in
         git)
             echo "Filter: git operations (status, log, diff, etc.)"
-            echo "Bash output reduction: 60-80% depending on subcommand"
+            echo "Token savings: 60-80% depending on subcommand"
             ;;
         cargo)
             echo "Filter: cargo build/test/clippy output"
-            echo "Bash output reduction: 80-90% (failures only for tests)"
+            echo "Token savings: 80-90% (failures only for tests)"
             ;;
         gh)
             echo "Filter: GitHub CLI (pr, issue, run)"
-            echo "Bash output reduction: 79-87% depending on subcommand"
+            echo "Token savings: 26-87% depending on subcommand"
             ;;
         pnpm)
             echo "Filter: pnpm package manager"
-            echo "Bash output reduction: 70-90% (dependency trees)"
+            echo "Token savings: 70-90% (dependency trees)"
             ;;
         *)
             echo "Filter: Available for $COMMAND"
-            echo "Bash output reduction: 60-90% (typical)"
+            echo "Token savings: 60-90% (typical)"
             ;;
     esac
 else
@@ -176,22 +176,22 @@ if rtk --help | grep -E "^  $COMMAND" >/dev/null 2>&1; then
     echo "  Filter: Applied"
     echo ""
 
-    # Estimate bash output reduction (based on historical data)
+    # Estimate token savings (based on historical data)
     case "$COMMAND" in
         git)
-            echo "Expected bash output reduction: 60-80%"
+            echo "Expected Token Savings: 60-80%"
             echo "Startup Time: <10ms"
             ;;
         cargo)
-            echo "Expected bash output reduction: 80-90%"
+            echo "Expected Token Savings: 80-90%"
             echo "Startup Time: <10ms"
             ;;
         gh)
-            echo "Expected bash output reduction: 79-87%"
+            echo "Expected Token Savings: 26-87%"
             echo "Startup Time: <10ms"
             ;;
         *)
-            echo "Expected bash output reduction: 60-90%"
+            echo "Expected Token Savings: 60-90%"
             echo "Startup Time: <10ms"
             ;;
     esac
@@ -234,7 +234,7 @@ Routing:
   Route:  rtk git status
   Filter: Applied
 
-Expected bash output reduction: 60-80%
+Expected Token Savings: 60-80%
 Startup Time: <10ms
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -329,7 +329,7 @@ Identifier commandes sans filtre qui pourraient bénéficier :
 # ⚠️  No filter
 
 # Consider contributing pytest filter
-# Expected bash output reduction: 90% (failures only)
+# Expected savings: 90% (failures only)
 # Complexity: Medium (JSON output parsing)
 ```
 
@@ -347,7 +347,7 @@ Dans Claude Code, cette command permet de :
 User: "Is git status supported by RTK?"
 Assistant: "Let me check with /test-routing git status"
 [Runs command]
-Assistant: "Yes! RTK has a filter for git status cutting 60-80% of its bash output."
+Assistant: "Yes! RTK has a filter for git status with 60-80% token savings."
 ```
 
 ## Limitations
