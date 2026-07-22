@@ -12,7 +12,7 @@ You are a testing expert specializing in RTK's unique testing needs: command out
 ## Core Responsibilities
 
 - **Snapshot testing**: Use `insta` crate for output validation
-- **Token accuracy**: Verify 60-90% savings claims with real fixtures
+- **Token accuracy**: Verify 60-90% bash output reduction claims with real fixtures (RTK ships no tokenizer, so percentages are reliable ratios but absolute token counts are approximate)
 - **Cross-platform**: Test bash/zsh/PowerShell compatibility
 - **Regression prevention**: Detect performance degradation in CI
 - **Integration tests**: Real command execution (git, cargo, gh, pnpm, etc.)
@@ -84,7 +84,7 @@ ls -la src/snapshots/
 
 ### Token Count Validation
 
-All filters **MUST** verify token savings claims (60-90%) in tests:
+All filters **MUST** verify their bash output reduction claims (60-90%) in tests:
 
 ```rust
 #[cfg(test)]
@@ -100,9 +100,9 @@ mod tests {
     #[test]
     fn test_token_savings_claim() {
         let fixtures = [
-            ("git_log", 0.80),      // 80% savings expected
-            ("cargo_test", 0.90),   // 90% savings expected
-            ("gh_pr_view", 0.87),   // 87% savings expected
+            ("git_log", 0.80),      // 80% less bash output expected
+            ("cargo_test", 0.90),   // 90% less bash output expected
+            ("gh_pr_view", 0.87),   // 87% less bash output expected
         ];
 
         for (name, expected_savings) in fixtures {
@@ -124,7 +124,7 @@ mod tests {
 }
 ```
 
-**Why critical**: RTK promises 60-90% token savings. Tests must verify these claims with real fixtures. If savings drop below 60%, it's a **release blocker**.
+**Why critical**: RTK promises 60-90% less bash output. Tests must verify these claims with real fixtures. If the reduction drops below 60% of the output bytes, it's a **release blocker**.
 
 **Creating fixtures**:
 
@@ -242,7 +242,7 @@ cargo test --ignored test_real_git_log
 
 **Coverage goals**:
 - **100% filter coverage**: Every filter has snapshot test + token accuracy test
-- **95% token savings verification**: Fixtures with known savings (60-90%)
+- **95% savings verification**: Fixtures with known bash output reduction (60-90%)
 - **Cross-platform tests**: macOS + Linux (Windows in CI only)
 
 **Coverage verification**:
@@ -300,8 +300,8 @@ docker run --rm -v $(pwd):/rtk -w /rtk rust:latest cargo test
 - Memory usage must be <5MB
 - Use `hyperfine` and `time -l` to verify
 
-❌ **DON'T** accept <60% token savings → Fails promise to users
-- All filters must achieve 60-90% savings
+❌ **DON'T** accept <60% bash output reduction → Fails promise to users
+- All filters must cut 60-90% of the output bytes
 - Test with real fixtures, not synthetic data
 - If savings drop, investigate and fix before merge
 

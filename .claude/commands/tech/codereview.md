@@ -84,7 +84,7 @@ git diff "$BASE_BRANCH"...HEAD --stat
 **Tests**:
 - `#[cfg(test)] mod tests` embarqué dans chaque module
 - Fixtures réelles dans `tests/fixtures/<cmd>_raw.txt`
-- `count_tokens()` pour vérifier savings ≥60%
+- `count_tokens()` pour vérifier ≥60% de réduction de la sortie bash
 - `assert_snapshot!` (insta) pour output format
 
 **Module**:
@@ -93,7 +93,7 @@ git diff "$BASE_BRANCH"...HEAD --stat
 - `strip_ansi()` depuis `utils.rs` — pas re-implémenté
 
 **Filtres**:
-- Token savings ≥60% obligatoire (release blocker)
+- Réduction ≥60% de la sortie bash obligatoire, mesurée avec l'estimateur de tokens de RTK et non des tokens facturés (release blocker)
 - Fallback: si filter échoue → raw command exécutée
 - Pas d'output ASCII art, pas de verbose metadata inutile
 
@@ -105,7 +105,7 @@ git diff "$BASE_BRANCH"...HEAD --stat
 - `Regex::new()` dans une fonction (pas de lazy_static)
 - `?` sans `.context()` — erreur sans description
 - Dépendance async ajoutée (tokio, async-std, futures)
-- Token savings <60% pour un nouveau filtre
+- Réduction de la sortie bash <60% pour un nouveau filtre
 - Pas de fallback vers commande brute sur échec de filtre
 - `panic!()` en production (hors tests)
 - Exit code non propagé sur commande sous-jacente
@@ -113,7 +113,7 @@ git diff "$BASE_BRANCH"...HEAD --stat
 - **Tests manquants pour NOUVEAU code** :
   - Nouveau `*_cmd.rs` sans `#[cfg(test)] mod tests`
   - Nouveau filtre sans fixture réelle dans `tests/fixtures/`
-  - Nouveau filtre sans test de token savings (`count_tokens()`)
+  - Nouveau filtre sans test de réduction de sortie (`count_tokens()`)
 
 ### 🟡 SHOULD FIX (important)
 

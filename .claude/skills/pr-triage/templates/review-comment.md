@@ -53,7 +53,7 @@ Use this template to generate GitHub PR review comments. Fill in each section ba
 
 **Issue severity** :
 - 🔴 Critical : security vulnerability, data loss risk, broken functionality, test missing for new feature
-- 🟡 Important : error handling gap, performance regression, scope creep, missing token savings assertion
+- 🟡 Important : error handling gap, performance regression, scope creep, missing bash output reduction assertion
 - 🟢 Suggestion : naming, DRY opportunity, documentation, style
 
 **RTK-specific checks to mention if relevant** :
@@ -61,7 +61,7 @@ Use this template to generate GitHub PR review comments. Fill in each section ba
 - `anyhow::Result` + `.context("msg")` (no bare `?`, no `.unwrap()`)
 - Fallback to raw command on filter failure
 - Exit code propagation (`std::process::exit(code)`)
-- Token savings assertion ≥60% in tests
+- Bash output reduction assertion ≥60% in tests
 - Real fixtures (not synthetic test data)
 - No async/tokio dependencies (startup time)
 

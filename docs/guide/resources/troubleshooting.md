@@ -2,7 +2,7 @@
 title: Troubleshooting
 description: Common RTK issues and how to fix them
 sidebar:
-  order: 2
+  order: 3
 ---
 
 # Troubleshooting
@@ -21,14 +21,14 @@ rtk: 'gain' is not a rtk command. See 'rtk --help'.
 ```bash
 cargo uninstall rtk
 curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
-rtk gain    # should now show token savings stats
+rtk gain    # should now show the savings dashboard
 ```
 
 ## How to tell which rtk you have
 
 | If `rtk gain`... | You have |
 |------------------|----------|
-| Shows token savings dashboard | Rust Token Killer ✅ |
+| Shows the savings dashboard | Rust Token Killer ✅ |
 | Returns "not a rtk command" | Rust Type Kit ❌ |
 
 ## AI assistant not using RTK

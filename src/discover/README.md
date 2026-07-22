@@ -46,7 +46,7 @@ When a hook sends `cargo fmt --all && cargo test 2>&1 | tail -20`:
 1. Extracts commands from the JSONL (via `SessionProvider` trait — currently only Claude Code)
 2. Splits compound commands using the same lexer-based tokenization
 3. Classifies each command against the same rules used for live rewriting
-4. Aggregates results: which commands could have been rewritten, estimated token savings, adoption rate
+4. Aggregates results: which commands could have been rewritten, estimated bash output reduction (an estimate of shell output, not billed tokens), adoption rate
 
 The classification logic is shared between discover and rewrite — same patterns, same rules, different consumers.
 

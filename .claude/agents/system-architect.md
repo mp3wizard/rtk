@@ -122,7 +122,7 @@ max_lines = 50
 ```
 
 Use TOML DSL when: simple grep/strip transformations.
-Use Rust module when: complex parsing, structured output (JSON/NDJSON), token savings >80%.
+Use Rust module when: complex parsing, structured output (JSON/NDJSON), bash output reduction >80%.
 
 ### Pattern 4: Shared Utilities
 
@@ -181,5 +181,5 @@ Before adding code to a module, check `utils.rs`:
 **Will not:**
 - Implement the full filter logic (→ rust-rtk agent)
 - Write the actual regex patterns (→ implementation detail)
-- Make decisions about token savings targets (→ fixed at ≥60%)
+- Make decisions about savings targets (→ fixed at ≥60% reduction in bash output)
 - Override the <10ms startup constraint (→ non-negotiable)

@@ -82,7 +82,7 @@ For build tools (next, webpack, vite, cargo, etc.)
 ### Ultra (verbosity=2+)
 - Symbols: ✓✗⚠ pkg: ^
 - Ultra-compressed
-- 30-50% token reduction
+- Replaces labels and status words with single-character symbols, dropping whatever Compact still spells out
 
 ## Error Handling
 

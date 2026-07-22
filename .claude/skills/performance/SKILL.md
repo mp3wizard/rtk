@@ -1,10 +1,10 @@
 ---
-description: CLI performance optimization - startup time, memory usage, token savings benchmarking
+description: CLI performance optimization - startup time, memory usage, bash output reduction benchmarking
 ---
 
 # Performance Optimization Skill
 
-Systematic performance analysis and optimization for RTK CLI tool, focusing on **startup time (<10ms)**, **memory usage (<5MB)**, and **token savings (60-90%)**.
+Systematic performance analysis and optimization for RTK CLI tool, focusing on **startup time (<10ms)**, **memory usage (<5MB)**, and **bash output reduction (60-90%)**.
 
 ## When to Use
 
@@ -18,7 +18,7 @@ Systematic performance analysis and optimization for RTK CLI tool, focusing on *
 |--------|--------|---------------------|-------------------|
 | **Startup time** | <10ms | `hyperfine 'rtk <cmd>'` | >15ms = blocker |
 | **Memory usage** | <5MB resident | `/usr/bin/time -l rtk <cmd>` (macOS) | >7MB = blocker |
-| **Token savings** | 60-90% | Tests with `count_tokens()` | <60% = blocker |
+| **Bash output reduction** | 60-90% | Tests with `count_tokens()` (bytes/4 estimator) | <60% = blocker |
 | **Binary size** | <5MB stripped | `ls -lh target/release/rtk` | >8MB = investigate |
 
 ## Performance Analysis Workflow
@@ -112,7 +112,7 @@ cargo install dhat
 # static ALLOC: dhat::Alloc = dhat::Alloc;
 ```
 
-**Token savings regression** (<60% savings):
+**Bash output reduction regression** (<60%):
 ```bash
 # Run token accuracy tests
 cargo test test_token_savings
@@ -329,9 +329,9 @@ Before committing filter changes:
 - [ ] Verify <5MB resident set size
 - [ ] Compare against baseline (regression <1MB)
 
-### Token Savings
+### Bash Output Reduction
 - [ ] Run `cargo test test_token_savings`
-- [ ] Verify all filters achieve ≥60% savings
+- [ ] Verify all filters achieve ≥60% bash output reduction
 - [ ] Check real fixtures used (not synthetic)
 
 ### Binary Size

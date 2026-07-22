@@ -89,7 +89,7 @@ pub fn filter_git_log(input: &str) -> String {
 
 ### Token Count Validation (Testing Critical)
 
-All filters **MUST** verify token savings claims (60-90%) in tests:
+All filters **MUST** verify their bash output reduction claims (60-90%) in tests. The gate measures shell output with RTK's token estimator, not billed tokens:
 
 ```rust
 #[cfg(test)]
@@ -113,7 +113,7 @@ mod tests {
 
         let savings = 100.0 - (output_tokens as f64 / input_tokens as f64 * 100.0);
 
-        // RTK promise: 60-90% savings
+        // RTK promise: 60-90% less bash output
         assert!(
             savings >= 60.0,
             "Git log filter: expected ≥60% savings, got {:.1}%",
@@ -126,7 +126,7 @@ mod tests {
 }
 ```
 
-**Why**: Token savings claims (60-90%) must be **verifiable**. Tests with real fixtures prevent regressions. If savings drop below 60%, it's a release blocker.
+**Why**: The 60-90% bash output reduction claims must be **verifiable**. Tests with real fixtures prevent regressions. If the reduction drops below 60% of the output bytes, it's a release blocker.
 
 ### Cross-Platform Shell Escaping
 
@@ -395,7 +395,7 @@ docker run --rm -v $(pwd):/rtk -w /rtk rust:latest cargo test  # Linux via Docke
 
 ✅ **DO** provide fallback to raw command on filter failure
 ✅ **DO** compile regex once with `lazy_static!`
-✅ **DO** verify token savings claims in tests (≥60%)
+✅ **DO** verify bash output reduction claims in tests (≥60%)
 ✅ **DO** test on macOS + Linux + Windows (via CI or manual)
 ✅ **DO** run `cargo fmt && cargo clippy --all-targets && cargo test` before commit
 ✅ **DO** benchmark startup time with `hyperfine` (<10ms target)
@@ -517,7 +517,7 @@ rtk newcmd args
 |--------|--------|--------------|
 | Startup time | <10ms | `hyperfine 'rtk git status'` |
 | Memory overhead | <5MB | `/usr/bin/time -l rtk git status` |
-| Token savings | 60-90% | Tests with `count_tokens()` |
+| Bash output reduction | 60-90% | Tests with `count_tokens()` |
 | Binary size | <5MB stripped | `ls -lh target/release/rtk` |
 
 **Performance regressions are release blockers** - always benchmark before/after changes.

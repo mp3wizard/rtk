@@ -1,6 +1,6 @@
 ---
 name: tdd-rust
-description: TDD workflow for RTK filter development. Red-Green-Refactor with Rust idioms. Real fixtures, token savings assertions, snapshot tests with insta. Auto-triggers on new filter implementation.
+description: TDD workflow for RTK filter development. Red-Green-Refactor with Rust idioms. Real fixtures, bash output reduction assertions, snapshot tests with insta. Auto-triggers on new filter implementation.
 triggers:
   - "new filter"
   - "implement filter"
@@ -14,7 +14,7 @@ allowed-tools:
   - Edit
   - Bash
 effort: medium
-tags: [tdd, testing, rust, filters, snapshots, token-savings, rtk]
+tags: [tdd, testing, rust, filters, snapshots, bash-output-reduction, rtk]
 ---
 
 # RTK TDD Workflow
@@ -68,7 +68,7 @@ mod tests {
         assert_snapshot!(output);
     }
 
-    // Test 2: Token savings ≥60%
+    // Test 2: Bash output reduction ≥60%
     #[test]
     fn test_token_savings() {
         let input = include_str!("../tests/fixtures/mycmd_raw.txt");
@@ -80,7 +80,7 @@ mod tests {
 
         assert!(
             savings >= 60.0,
-            "Expected ≥60% token savings, got {:.1}% ({} → {} tokens)",
+            "Expected ≥60% bash output reduction, got {:.1}% ({} → {} est. tokens)",
             savings, input_tokens, output_tokens
         );
     }
@@ -259,7 +259,7 @@ Checklist before moving on:
 - [ ] `tests/fixtures/<cmd>_raw.txt` — real command output
 - [ ] `filter_<cmd>()` function returns `Result<String>`
 - [ ] Snapshot test passes and accepted via `cargo insta review`
-- [ ] Token savings test: ≥60% verified
+- [ ] Bash output reduction test: ≥60% verified
 - [ ] Empty input test: no panic
 - [ ] Malformed input test: no panic
 - [ ] `run()` function with fallback pattern
@@ -272,11 +272,11 @@ Checklist before moving on:
 // ❌ Synthetic fixture data
 let input = "fake error: something went wrong";  // Not real cargo output
 
-// ❌ Missing savings test
+// ❌ Missing bash output reduction test
 #[test]
 fn test_filter() {
     let output = filter_mycmd(input);
-    assert!(!output.is_empty());  // No savings verification
+    assert!(!output.is_empty());  // No bash output reduction verification
 }
 
 // ❌ unwrap() in production code

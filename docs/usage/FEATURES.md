@@ -1,8 +1,24 @@
 # RTK - Documentation fonctionnelle complete
 
-> **rtk (Rust Token Killer)** -- Proxy CLI haute performance qui reduit la consommation de tokens LLM de 60 a 90%.
+> **rtk (Rust Token Killer)** -- Proxy CLI haute performance qui reduit jusqu'a 90% de la sortie bash lue par votre agent.
 
 Binaire Rust unique, zero dependances externes, overhead < 10ms par commande.
+
+## A propos des pourcentages d'economies
+
+Tous les pourcentages notes **Economies** dans ce document sont des **reductions d'octets de sortie bash** : la sortie qu'une commande shell renvoie avant que l'agent ne la lise. Ce n'est pas equivalent a une reduction de facture du meme ordre.
+
+```
+Octets de sortie bash  ->  Tokens d'entree  ->  Cout
+   filtres par RTK         une source parmi      tokens d'entree
+                           plusieurs             + tokens de sortie
+```
+
+La sortie bash n'est qu'une source parmi d'autres pour les tokens d'entree, aux cotes de votre prompt, du prompt systeme et de l'historique de conversation. Les tokens d'entree ne representent eux-memes qu'une partie de la facture, qui compte aussi les tokens de sortie. La reduction se dilue a chaque etape.
+
+Les compteurs de tokens affiches par RTK sont estimes a `octets / 4` : RTK n'embarque pas de tokenizer, donc **les pourcentages sont fiables mais les nombres absolus de tokens sont approximatifs**.
+
+Explication complete : [How RTK Savings Work](../guide/resources/savings-explained.md)
 
 ---
 
@@ -80,7 +96,7 @@ rtk ls [args...]
 
 Tous les drapeaux natifs de `ls` sont supportes (`-l`, `-a`, `-h`, `-R`, etc.).
 
-**Economies :** ~80% de reduction de tokens
+**Economies :** ~80%
 
 **Avant / Apres :**
 ```
@@ -1400,11 +1416,13 @@ Aucune donnee personnelle, aucun contenu de commande, aucun chemin de fichier n'
 
 ## Resume des economies par categorie
 
-| Categorie | Commandes | Economies typiques |
+Reductions d'octets de sortie bash (voir [A propos des pourcentages d'economies](#a-propos-des-pourcentages-deconomies)).
+
+| Categorie | Commandes | Reduction de sortie bash |
 |-----------|-----------|-------------------|
 | **Fichiers** | ls, tree, read, find, grep, diff | 60-80% |
 | **Git** | status, log, diff, show, add, commit, push, pull | 75-92% |
-| **GitHub** | pr, issue, run, api | 26-87% |
+| **GitHub** | pr, issue, run, api | 79-87% |
 | **Tests** | cargo test, vitest, playwright, pytest, go test | 90-99% |
 | **Build/Lint** | cargo build, tsc, eslint, prettier, next, ruff, clippy | 70-87% |
 | **Paquets** | pnpm, npm, pip, deps, prisma | 60-80% |

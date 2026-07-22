@@ -4,6 +4,8 @@
 
 ## Specifics
 
+Percentages below are reductions in bash output, measured with RTK's token estimator rather than a real tokenizer.
+
 - `rake_cmd.rs` filters Minitest output via `rake test` / `rails test`; state machine text parser, failures only (85-90% reduction)
 - `rspec_cmd.rs` uses JSON injection (`--format json`) with text fallback; failures only (60%+ reduction)
 - `rubocop_cmd.rs` uses JSON injection, groups by cop/severity (60%+ reduction)

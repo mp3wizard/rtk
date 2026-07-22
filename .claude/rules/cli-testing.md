@@ -74,7 +74,10 @@ cargo test test_mvn_test_example
 
 **Priority**: 🔴 **Triggers**: All filter implementations, token savings claims
 
-All filters **MUST** verify 60-90% token savings claims with real fixtures.
+All filters **MUST** verify their 60-90% claims with real fixtures. What is measured is the
+**reduction in bash output**. RTK ships no tokenizer: tests count whitespace-separated tokens,
+`rtk gain` estimates `bytes / 4`. Both are reliable as ratios and approximate as absolute token
+counts. See [How RTK Savings Work](../../docs/guide/resources/savings-explained.md).
 
 ### Token Count Test
 
@@ -121,8 +124,9 @@ pnpm list > tests/fixtures/pnpm_list_raw.txt
 
 ### Savings Target
 
-There is a single enforced floor, not a per-filter table: **≥60% savings is the release
-blocker** (see CLAUDE.md's "Pre-commit Gate" / performance targets). Individual filters often
+There is a single enforced floor, not a per-filter table: **≥60% reduction in bash output is
+the release blocker** (see CLAUDE.md's "Pre-commit Gate" / performance targets).
+Individual filters often
 exceed this by a wide margin, but don't assert specific per-command percentages (e.g. "87% for
 `gh pr view`") unless you've verified the actual number against that filter's own fixtures —
 asserted thresholds vary per filter and doc tables listing invented numbers rot immediately.
@@ -344,7 +348,7 @@ When adding/modifying a filter:
 ### Implementation Phase
 - [ ] Write a unit test in the filter's own `#[cfg(test)] mod tests` block (inline string, or
       `include_str!` fixture for larger/real output)
-- [ ] Add a token accuracy test (verify ≥60% savings) using a locally-defined `count_tokens`
+- [ ] Add a token accuracy test (verify ≥60% bash output reduction) using a locally-defined `count_tokens`
 - [ ] Test cross-platform shell escaping (if applicable)
 
 ### Quality Checks
@@ -354,7 +358,7 @@ When adding/modifying a filter:
 
 ### Before Merge
 - [ ] All tests passing (`cargo test --all`)
-- [ ] Token savings ≥60% verified
+- [ ] ≥60% bash output reduction verified
 - [ ] Cross-platform tests passed (Linux + macOS)
 - [ ] Performance benchmarks passed (<10ms startup)
 
@@ -532,7 +536,7 @@ hyperfine 'target/release/rtk cmd' --warmup 3 > /tmp/after.txt
 diff /tmp/before.txt /tmp/after.txt
 ```
 
-❌ **DON'T** accept <60% token savings
+❌ **DON'T** accept <60% bash output reduction
 ```rust
 // ❌ WRONG - no savings verification
 #[test]

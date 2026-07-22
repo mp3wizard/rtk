@@ -27,7 +27,7 @@ src/main.rs (Commands enum + routing)
 
 **Non-negotiable constraints:**
 - Startup time <10ms (zero async, single-threaded)
-- Token savings ≥60% per filter
+- ≥60% reduction in bash output per filter (measured with RTK's token estimator, not billed tokens)
 - Fallback to raw command if filter fails
 - Exit codes propagated from underlying commands
 
@@ -74,7 +74,7 @@ Raise alarms immediately when you see:
 
 **Token Savings:**
 - `count_tokens()` helper in tests
-- Savings ≥60% for all filters (release blocker)
+- ≥60% bash output reduction for all filters (release blocker)
 - Output: failures only, summary stats, no verbose metadata
 - Truncation strategy: consistent across filters
 
