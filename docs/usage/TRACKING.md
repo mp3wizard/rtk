@@ -5,9 +5,13 @@ Comprehensive documentation for RTK's tracking system, which records how much **
 Everything the tracker stores is measured on bash output bytes, converted to estimated tokens:
 
 ```
-Bash output bytes  ->  Input tokens  ->  Cost
- what RTK filters      one input source     input + output tokens
-                       among several
+Cost
+├─ Input tokens
+│  ├─ Bash output           <- the only part RTK filters
+│  ├─ Your prompt
+│  ├─ System prompt
+│  └─ Conversation history
+└─ Output tokens            <- what the model writes
 ```
 
 Bash output is one contributor to input tokens, alongside your prompt, the system prompt and conversation history. Input tokens are in turn only part of the bill, which also counts output tokens. `savings_pct` is therefore a **bash output byte ratio** — not a cost figure and not a share of your token bill.

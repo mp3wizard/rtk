@@ -28,9 +28,13 @@ The only thing RTK changes is **the bytes a shell command sends back**. Everythi
 ## The savings chain
 
 ```
-Bash output bytes  ->  Input tokens  ->  Cost
- what RTK filters      one input source     input + output tokens
-                       among several
+Cost
+├─ Input tokens
+│  ├─ Bash output           <- the only part RTK filters
+│  ├─ Your prompt
+│  ├─ System prompt
+│  └─ Conversation history
+└─ Output tokens            <- what the model writes
 ```
 
 Those bytes are **one contributor to input tokens**, alongside your prompt, the system prompt, and conversation history. Input tokens are in turn **only part of the bill**, which also counts output tokens.

@@ -32,9 +32,13 @@ Zero config changes to your workflow. The hook handles everything automatically.
 RTK reduces **bash output bytes** — the output a shell command sends back before your agent reads it. That is not the same as reducing your bill by the same amount:
 
 ```
-Bash output bytes  ->  Input tokens  ->  Cost
- what RTK filters      one input source     input + output tokens
-                       among several
+Cost
+├─ Input tokens
+│  ├─ Bash output           <- the only part RTK filters
+│  ├─ Your prompt
+│  ├─ System prompt
+│  └─ Conversation history
+└─ Output tokens            <- what the model writes
 ```
 
 Bash output is one contributor to input tokens, alongside your prompt, the system prompt and conversation history. Input tokens are in turn only part of the bill, which also counts output tokens. The reduction dilutes at every step.

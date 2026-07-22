@@ -60,9 +60,13 @@ RTK intercepts shell commands and compresses their output before your agent read
 RTK cuts **up to 90% of the bash output** your agent reads. That is what RTK measures, and it is not the same as cutting your bill by 90%.
 
 ```
-Bash output bytes  ->  Input tokens  ->  Cost
- what RTK filters      one input source     input + output tokens
-                       among several
+Cost
+├─ Input tokens
+│  ├─ Bash output           <- the only part RTK filters
+│  ├─ Your prompt
+│  ├─ System prompt
+│  └─ Conversation history
+└─ Output tokens            <- what the model writes
 ```
 
 Bash output is **one contributor to input tokens**, alongside your prompt, the system prompt and conversation history. Input tokens are in turn **only part of the bill**, which also counts output tokens. The reduction dilutes at every step.

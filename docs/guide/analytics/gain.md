@@ -12,9 +12,13 @@ sidebar:
 What `rtk gain` measures is the reduction in **bash output bytes**, converted to estimated tokens:
 
 ```
-Bash output bytes  ->  Input tokens  ->  Cost
- what RTK filters      one input source     input + output tokens
-                       among several
+Cost
+├─ Input tokens
+│  ├─ Bash output           <- the only part RTK filters
+│  ├─ Your prompt
+│  ├─ System prompt
+│  └─ Conversation history
+└─ Output tokens            <- what the model writes
 ```
 
 Bash output is one contributor to input tokens, alongside your prompt, the system prompt and conversation history. Input tokens are in turn only part of the bill, which also counts output tokens. See [How RTK Savings Work](../resources/savings-explained.md) for the full picture.
