@@ -63,7 +63,7 @@ fn is_integration_test_cmd(subcommand: &str) -> bool {
 fn is_test_task(subcommand: &str) -> bool {
     let task = subcommand.split_whitespace().next().unwrap_or(subcommand);
     let task = task.rsplit(['/', ':']).next().unwrap_or(task);
-    matches!(task, "testOnly" | "testQuick" | "test-only" | "test-quick")
+    matches!(task, "testOnly" | "testQuick")
 }
 
 /// Returns true if `s` is a scoped SBT task (e.g. `Test/test`, `it/Test/compile`).
@@ -704,7 +704,6 @@ mod tests {
     fn test_is_test_task() {
         assert!(is_test_task("testOnly"));
         assert!(is_test_task("testQuick"));
-        assert!(is_test_task("test-only"));
         assert!(is_test_task("Test/testOnly"));
         assert!(is_test_task("core/testOnly"));
         assert!(is_test_task("it:testOnly"));
