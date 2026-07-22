@@ -147,6 +147,12 @@ pub fn run_other(args: &[OsString], verbose: u8) -> Result<i32> {
             eprintln!("Running: sbt {} ...", subcommand);
         }
 
+        let tee_label = if is_integration_test_cmd(&subcommand) {
+            "sbt_it_test"
+        } else {
+            "sbt_test"
+        };
+
         let rest: Vec<String> = args[1..]
             .iter()
             .map(|a| a.to_string_lossy().into_owned())
@@ -155,12 +161,6 @@ pub fn run_other(args: &[OsString], verbose: u8) -> Result<i32> {
             subcommand
         } else {
             format!("{} {}", subcommand, rest.join(" "))
-        };
-
-        let tee_label = if is_integration_test_cmd(&subcommand) {
-            "sbt_it_test"
-        } else {
-            "sbt_test"
         };
 
         return runner::run_filtered(
