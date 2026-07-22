@@ -157,12 +157,18 @@ pub fn run_other(args: &[OsString], verbose: u8) -> Result<i32> {
             format!("{} {}", subcommand, rest.join(" "))
         };
 
+        let tee_label = if is_integration_test_cmd(&subcommand) {
+            "sbt_it_test"
+        } else {
+            "sbt_test"
+        };
+
         return runner::run_filtered(
             cmd,
             "sbt",
             &args_display,
             filter_sbt_test,
-            RunOptions::with_tee("sbt_it_test"),
+            RunOptions::with_tee(tee_label),
         );
     }
 
