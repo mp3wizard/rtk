@@ -504,10 +504,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-07-21 |
-| Status | PASSED |
-| Summary | 15 upstream commits merged; 0 new issues; 6 findings unchanged from 2026-07-20 (mutable action pins, `secrets: inherit` — need manual PR review; rest false positives) |
-| Report | [Security reports/security-audit-2026-07-21.md](Security%20reports/security-audit-2026-07-21.md) |
+| Last audit | 2026-07-22 |
+| Status | ISSUES FIXED (build gate skipped — no toolchain) |
+| Summary | 9 upstream commits merged (SBT/Scala support); fixed `secrets: inherit` least-privilege issue in cd.yml (2 sites); mutable action-tag pins still need manual PR review; rest (gitleaks/bandit) confirmed false positives; cargo build/test gate did not run (no Rust toolchain in sandbox) |
+| Report | [Security reports/security-audit-2026-07-22.md](Security%20reports/security-audit-2026-07-22.md) |
 
 ## Contributing
 
