@@ -206,7 +206,7 @@ LLM Agent executes rewritten command
 Key design decisions:
 - **Lexer-based tokenization**: A single-pass state machine (`lexer.rs`) handles all shell constructs (quotes, escapes, redirects, operators). Used for both compound splitting and redirect stripping.
 - **Segment-level rewriting**: Compound commands are split by operators, each segment rewritten independently. Bash recombines them at execution time.
-- **Pipe semantics**: Producers and intermediate stages of `|` remain raw. Only an argument-safe final stage whose rule has `pipeline_final_safe` may be rewritten; initially this is limited to ordinary `grep`, `rg`, and `wc` invocations. Search pattern-file forms (`-f`/`--file`) defer because they can consume pipeline stdin as configuration. `|&` is recognized separately and its complete pipeline stays raw.
+- **Pipe semantics**: Producers and intermediate stages of `|` remain raw. Only an argument-safe final stage whose rule has `pipeline_final_safe` may be rewritten; initially this is limited to ordinary `grep` and `rg` invocations. Search pattern-file forms (`-f`/`--file`) defer because they can consume pipeline stdin as configuration. `|&` is recognized separately and its complete pipeline stays raw.
 - **Double env prefix handling**: `classify_command()` strips env prefixes to match the underlying command against rules. `rewrite_segment()` extracts the same prefix separately to re-prepend it to the rewritten command.
 - **Fallback contract**: If any segment fails to match, it stays raw. `rewrite_command()` returns `None` only when zero segments were rewritten.
 

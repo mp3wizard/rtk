@@ -1068,7 +1068,7 @@ pub const RULES: &[RtkRule] = &[
     RtkRule {
         pattern: r"^wc(\s|$)",
         rtk_cmd: "rtk wc",
-        pipeline_final_safe: true,
+        pipeline_final_safe: false,
         rewrite_prefixes: &["wc"],
         category: "Files",
         savings_pct: 60.0,

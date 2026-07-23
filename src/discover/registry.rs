@@ -1195,7 +1195,7 @@ mod tests {
             .map(|rule| rule.rtk_cmd)
             .collect();
 
-        assert_eq!(safe_rules, vec!["rtk grep", "rtk rg", "rtk wc"]);
+        assert_eq!(safe_rules, vec!["rtk grep", "rtk rg"]);
     }
 
     #[test]
@@ -1929,18 +1929,18 @@ mod tests {
     }
 
     #[test]
-    fn test_rewrite_find_pipe_wc_rewrites_only_wc() {
+    fn test_rewrite_find_pipe_wc_stays_raw() {
         assert_eq!(
             rewrite_command_no_prefixes("find src -type f | wc -l", &[]),
-            Some("find src -type f | rtk wc -l".into())
+            None
         );
     }
 
     #[test]
-    fn test_rewrite_multi_pipe_final_safe_stage_only() {
+    fn test_rewrite_multi_pipe_with_wc_final_stays_raw() {
         assert_eq!(
             rewrite_command_no_prefixes("git log | grep feat | wc -l", &[]),
-            Some("git log | grep feat | rtk wc -l".into())
+            None
         );
     }
 
