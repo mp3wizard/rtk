@@ -346,7 +346,8 @@ bench "wc" "wc Cargo.toml src/main.rs" "$RTK wc Cargo.toml src/main.rs"
 # ===================
 section "curl"
 if command -v curl &> /dev/null; then
-  bench "curl json" "curl -s https://mockhttp.org/json" "$RTK curl https://mockhttp.org/json"
+  # The base64 value decodes to: {"status":"ok","items":[1,2,3]}
+  bench "curl json" "curl -s https://mockhttp.org/base64/eyJzdGF0dXMiOiJvayIsIml0ZW1zIjpbMSwyLDNdfQ==" "$RTK curl https://mockhttp.org/base64/eyJzdGF0dXMiOiJvayIsIml0ZW1zIjpbMSwyLDNdfQ=="
   bench "curl text" "curl -s https://mockhttp.org/robots.txt" "$RTK curl https://mockhttp.org/robots.txt"
 fi
 
@@ -355,8 +356,8 @@ fi
 # ===================
 if command -v wget &> /dev/null; then
   section "wget"
-  bench "wget" "wget -qO- https://mockhttp.org/json" "$RTK wget https://mockhttp.org/json"
-  rm -f json 2>/dev/null
+  bench "wget" "wget -qO- https://mockhttp.org/range/1000" "$RTK wget https://mockhttp.org/range/1000"
+  rm -f 1000 2>/dev/null
 fi
 
 # ===================
