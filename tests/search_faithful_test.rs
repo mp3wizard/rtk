@@ -302,6 +302,13 @@ fn grep_passthrough_streams_before_stdin_closes() {
 }
 
 #[test]
+fn rg_passthrough_streams_before_stdin_closes() {
+    if rg_available() {
+        assert_streams_before_stdin_closes(&["rg", "-o", "ERROR"], "ERROR");
+    }
+}
+
+#[test]
 fn rg_reads_piped_stdin_without_flooding_cwd() {
     if !rg_available() {
         return;
