@@ -515,10 +515,10 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-07-23 |
-| Status | PASSED |
-| Summary | 6 upstream commits merged (sbt testOnly/testQuick filter fixes); 84 raw scanner hits (gitleaks/semgrep/bandit) all triaged as false positive / not applicable — no real vulnerabilities or secrets found; trivy + trufflehog clean |
-| Report | [Security reports/security-audit-2026-07-23.md](Security%20reports/security-audit-2026-07-23.md) |
+| Last audit | 2026-07-24 |
+| Status | ISSUES REMAINING (build env gap) |
+| Summary | 19 upstream commits merged (pipe rewrite safety, deterministic benchmarks, sbt pipeline docs); 49 raw scanner hits (gitleaks/semgrep) all triaged as false positive / inherent CLI patterns — no real vulnerabilities or secrets found; trivy + trufflehog + osv-scanner clean; binary rebuild skipped — no Rust toolchain in this run's sandbox |
+| Report | [Security reports/security-audit-2026-07-24.md](Security%20reports/security-audit-2026-07-24.md) |
 
 ## Contributing
 
