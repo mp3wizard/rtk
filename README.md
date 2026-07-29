@@ -55,6 +55,14 @@ RTK intercepts shell commands and compresses their output before your agent read
 | `go test` | NDJSON parsed, failures only |
 | `docker ps` | Essential fields only |
 
+## Security Audit
+| | |
+|-|-|
+| Last audit | 2026-07-29 |
+| Status | PASSED |
+| Summary | 0 real vulnerabilities, 0 dependency CVEs, 0 verified secrets — 87 findings all triaged as false positives / deferred CI-hardening |
+| Report | [Security reports/security-audit-2026-07-29.md](Security%20reports/security-audit-2026-07-29.md) |
+
 ## How Savings Work
 
 RTK cuts **up to 90% of the bash output** your agent reads. That is what RTK measures, and it is not the same as cutting your bill by 90%.
