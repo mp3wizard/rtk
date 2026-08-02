@@ -58,10 +58,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-07-29 |
+| Last audit | 2026-08-02 |
 | Status | PASSED |
-| Summary | 0 real vulnerabilities, 0 dependency CVEs, 0 verified secrets — 87 findings all triaged as false positives / deferred CI-hardening |
-| Report | [Security reports/security-audit-2026-07-29.md](Security%20reports/security-audit-2026-07-29.md) |
+| Summary | 6 upstream commits merged (private-file/data-dir hardening: owner-only history db, tee logs, audit log); 0 real vulnerabilities, 0 dependency CVEs, 0 verified secrets — 36 gitleaks hits all triaged as false-positive placeholder keys in prior audit docs |
+| Report | [Security reports/security-audit-2026-08-02.md](Security%20reports/security-audit-2026-08-02.md) |
 
 ## How Savings Work
 
