@@ -58,10 +58,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-08-03 |
+| Last audit | 2026-08-04 |
 | Status | PASSED |
-| Summary | 6 upstream commits merged (Copilot CLI hook parity fixes); 0 real vulnerabilities, 0 dependency CVEs, 0 verified secrets — all gitleaks/bandit/config-audit/skill-audit hits triaged as false-positive placeholder keys or self-referential scanner patterns |
-| Report | [Security reports/security-audit-2026-08-03.md](Security%20reports/security-audit-2026-08-03.md) |
+| Summary | 7 upstream commits merged (multi-line Bash block rewrite support); 0 real vulnerabilities, 0 dependency CVEs, 0 verified secrets — all gitleaks/bandit/config-audit hits triaged as false-positive placeholder keys or out-of-scope global-plugin scanner patterns |
+| Report | [Security reports/security-audit-2026-08-04.md](Security%20reports/security-audit-2026-08-04.md) |
 
 ## How Savings Work
 
