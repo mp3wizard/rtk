@@ -58,10 +58,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-08-07 |
+| Last audit | 2026-08-12 |
 | Status | PASSED |
-| Summary | 13 upstream commits merged (Copilot/Vibe hook self-heal support); 0 real vulnerabilities, 0 dependency CVEs, 0 verified secrets — all gitleaks/trufflehog hits triaged as false-positive placeholder keys or Lob-detector test-name matches |
-| Report | [Security reports/security-audit-2026-08-07.md](Security%20reports/security-audit-2026-08-07.md) |
+| Summary | 3 upstream commits merged (UTF-8 lossy decode fix for stream filters); 0 real vulnerabilities, 0 dependency CVEs, 0 verified secrets — all gitleaks/trufflehog/bandit hits triaged as false-positive placeholder keys, Lob-detector test-name matches, or accepted-risk local tooling |
+| Report | [Security reports/security-audit-2026-08-12.md](Security%20reports/security-audit-2026-08-12.md) |
 
 ## How Savings Work
 
