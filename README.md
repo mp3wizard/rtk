@@ -58,10 +58,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-08-27 |
+| Last audit | 2026-08-29 |
 | Status | PASSED |
-| Summary | 20 upstream commits merged (find command rewrite, Pi hook fixes); 0 real vulnerabilities, 0 dependency CVEs (Semgrep/Trivy/OSV-Scanner all clean) — gitleaks/trufflehog/skill-audit hits triaged as false-positive test fixtures, Lob-detector identifier matches, and heuristic misreads of documentation examples |
-| Report | [Security reports/security-audit-2026-08-27.md](Security%20reports/security-audit-2026-08-27.md) |
+| Summary | 2 upstream commits merged (grep `-m`/`--max-count` flag collision fix); 0 real vulnerabilities, 0 dependency CVEs (OSV-Scanner/Trivy/Semgrep all clean) — gitleaks/trufflehog hits triaged as false-positive test fixtures and Lob-detector identifier matches |
+| Report | [Security reports/security-audit-2026-08-29.md](Security%20reports/security-audit-2026-08-29.md) |
 
 ## How Savings Work
 
@@ -519,14 +519,6 @@ export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
   [Github](https://github.com/kush) · [LinkedIn](https://www.linkedin.com/in/nicolas-le-cam-386387160/)
 - **Takayuki Maeda** — Core contributor
   [GitHub](https://github.com/TaKO8Ki) · [LinkedIn](https://www.linkedin.com/in/tako8ki/)
-
-## Security Audit
-| | |
-|-|-|
-| Last audit | 2026-07-28 |
-| Status | PASSED |
-| Summary | 11 upstream commits merged (LazyLock migration, cargo regex simplification, colored 3.1.1 bump, Copilot Windows hook fix, CI token fix); 93 raw scanner hits (gitleaks/semgrep/bandit) all triaged as false positive / inherent CLI patterns — no real vulnerabilities or secrets found; trivy + trufflehog + osv-scanner clean; GitHub Actions mutable-tag pinning flagged as unresolved (needs manual SHA verification) |
-| Report | [Security reports/security-audit-2026-07-28.md](Security%20reports/security-audit-2026-07-28.md) |
 
 ## Contributing
 
