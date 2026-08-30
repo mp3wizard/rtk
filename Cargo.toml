@@ -54,11 +54,6 @@ windows-sys = { version = "0.59", features = [
 [build-dependencies]
 toml = "0.8"
 
-[dev-dependencies]
-
-[dependencies.rustls-webpki]
-version = "=0.103.13"
-
 [profile.release]
 opt-level = 3
 lto = true

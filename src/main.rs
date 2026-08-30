@@ -22,8 +22,8 @@ use cmds::ruby::{rake_cmd, rspec_cmd, rubocop_cmd};
 use cmds::rust::{cargo_cmd, runner};
 use cmds::scala::sbt_cmd;
 use cmds::system::{
-    deps, env_cmd, find_cmd, format_cmd, json_cmd, local_llm, log_cmd, ls, pipe_cmd, read, search,
-    summary, tree, wc_cmd,
+    ctest_cmd, deps, env_cmd, find_cmd, format_cmd, json_cmd, local_llm, log_cmd, ls, pipe_cmd,
+    read, search, summary, tree, wc_cmd,
 };
 
 use anyhow::{Context, Result};
@@ -507,6 +507,14 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// CTest with compact output
+    #[command(disable_help_flag = true, disable_version_flag = true)]
+    Ctest {
+        /// Additional ctest arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
     /// Prisma commands with compact output (no ASCII art)
     Prisma {
         #[command(subcommand)]
@@ -828,6 +836,14 @@ enum Commands {
     /// Apache Maven wrapper with compact output (test, integration-test, compile, package, install, verify, deploy)
     #[command(name = "mvn")]
     Mvn {
+        /// Maven goals and arguments (e.g., clean install, -DskipTests test, -X)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Maven Daemon (mvnd) with compact output — same filters as `rtk mvn`
+    #[command(name = "mvnd")]
+    Mvnd {
         /// Maven goals and arguments (e.g., clean install, -DskipTests test, -X)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -2204,6 +2220,8 @@ fn run_cli() -> Result<i32> {
             vitest_cmd::run_test(&cli.command, args, cli.verbose)?
         }
 
+        Commands::Ctest { args } => ctest_cmd::run(&args, cli.verbose)?,
+
         Commands::Prisma { command } => match command {
             PrismaCommands::Generate { args } => {
                 prisma_cmd::run(prisma_cmd::PrismaCommand::Generate, &args, cli.verbose)?
@@ -2432,6 +2450,8 @@ fn run_cli() -> Result<i32> {
         Commands::Gradlew { args } => gradlew_cmd::run(&args, cli.verbose)?,
 
         Commands::Mvn { args } => mvn_cmd::run(&args, cli.verbose)?,
+
+        Commands::Mvnd { args } => mvn_cmd::run_daemon(&args, cli.verbose)?,
 
         Commands::HookAudit { since } => {
             hooks::hook_audit_cmd::run(since, cli.verbose)?;
@@ -2764,6 +2784,7 @@ fn is_operational_command(cmd: &Commands) -> bool {
             | Commands::Rg { .. }
             | Commands::Wget { .. }
             | Commands::Vitest { .. }
+            | Commands::Ctest { .. }
             | Commands::Prisma { .. }
             | Commands::Tsc { .. }
             | Commands::Next { .. }
@@ -3164,6 +3185,7 @@ mod tests {
             "wc",
             "jest",
             "vitest",
+            "ctest",
             "prisma",
             "tsc",
             "next",
@@ -3187,6 +3209,7 @@ mod tests {
             "golangci-lint",
             "gradlew",
             "mvn",
+            "mvnd",
             "sbt",
             "php",
             "phpunit",
@@ -3236,6 +3259,17 @@ mod tests {
                 assert_eq!(args, vec!["echo", "hello"]);
             }
             _ => panic!("Expected Run command"),
+        }
+    }
+
+    #[test]
+    fn test_ctest_help_and_version_passthrough_args() {
+        for flag in ["--help", "--version"] {
+            let cli = Cli::try_parse_from(["rtk", "ctest", flag]).unwrap();
+            match cli.command {
+                Commands::Ctest { args } => assert_eq!(args, vec![flag]),
+                _ => panic!("Expected Ctest command"),
+            }
         }
     }
 
