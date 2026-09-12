@@ -59,10 +59,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-09-11 |
+| Last audit | 2026-09-12 |
 | Status | PASSED |
-| Summary | Merged upstream (process-wrapper signal-relay fixes, prefix peeling); 0 CVEs, 0 dependency vulnerabilities, 0 verified secrets — gitleaks/semgrep hits triaged as false-positive test fixtures |
-| Report | [Security reports/security-audit-2026-09-11.md](Security%20reports/security-audit-2026-09-11.md) |
+| Summary | Merged upstream (git-show blob-decode hardening, hook-decision consolidation, winget packaging); 0 CVEs, 0 dependency vulnerabilities, 0 verified secrets — gitleaks/semgrep/bandit hits triaged as false-positive test fixtures or a deferred CI-hardening item |
+| Report | [Security reports/security-audit-2026-09-12.md](Security%20reports/security-audit-2026-09-12.md) |
 
 ## How Savings Work
 
