@@ -9,7 +9,7 @@ mod parser;
 // Re-export command modules for routing
 use cmds::cloud::{aws_cmd, container, curl_cmd, psql_cmd, wget_cmd};
 use cmds::dotnet::{binlog, dotnet_cmd, dotnet_format_report, dotnet_trx};
-use cmds::git::{diff_cmd, gh_cmd, git, glab_cmd, gt_cmd};
+use cmds::git::{diff_cmd, gh_cmd, git_cmd, glab_cmd, gt_cmd};
 use cmds::go::{go_cmd, golangci_cmd};
 use cmds::js::{
     bun_cmd, deno_cmd, lint_cmd, next_cmd, npm_cmd, playwright_cmd, pnpm_cmd, prettier_cmd,
@@ -24,8 +24,8 @@ use cmds::ruby::{rake_cmd, rspec_cmd, rubocop_cmd};
 use cmds::rust::{cargo_cmd, runner};
 use cmds::scala::sbt_cmd;
 use cmds::system::{
-    ctest_cmd, deps, env_cmd, find_cmd, format_cmd, json_cmd, local_llm, log_cmd, ls, pipe_cmd,
-    read, search, summary, tree, wc_cmd,
+    ast_grep_cmd, ctest_cmd, deps, env_cmd, find_cmd, format_cmd, json_cmd, local_llm, log_cmd, ls,
+    pipe_cmd, read, search, summary, tree, wc_cmd,
 };
 
 use anyhow::{Context, Result};
@@ -111,11 +111,16 @@ enum Commands {
         /// Filter: none (default, full content), minimal, aggressive
         #[arg(short, long, default_value = "none")]
         level: core::filter::FilterLevel,
-        /// Max lines
-        #[arg(short, long, conflicts_with = "tail_lines")]
+        /// Structural preview capped at N lines (keeps signatures and imports;
+        /// not the first N lines — use --head-lines for that)
+        #[arg(short, long, conflicts_with_all = ["head_lines", "tail_lines"])]
         max_lines: Option<usize>,
+        /// Keep only the first N lines (byte-exact at the default --level none
+        /// with -n off; --level and -n still transform the window)
+        #[arg(long, conflicts_with_all = ["max_lines", "tail_lines"])]
+        head_lines: Option<usize>,
         /// Keep only last N lines
-        #[arg(long, conflicts_with = "max_lines")]
+        #[arg(long, conflicts_with_all = ["max_lines", "head_lines"])]
         tail_lines: Option<usize>,
         /// Show line numbers
         #[arg(short = 'n', long)]
@@ -218,6 +223,14 @@ enum Commands {
         /// pnpm filter arguments (can be repeated: --filter @app1 --filter @app2)
         #[arg(long, short = 'F')]
         filter: Vec<String>,
+
+        /// Recursive across workspace packages (pnpm -r)
+        #[arg(long, short = 'r')]
+        recursive: bool,
+
+        /// Run in the workspace root (pnpm -w)
+        #[arg(long = "workspace-root", short = 'w')]
+        workspace_root: bool,
 
         #[command(subcommand)]
         command: PnpmCommands,
@@ -355,6 +368,13 @@ enum Commands {
         extra_args: Vec<String>,
     },
 
+    /// Compact ast-grep - runs ast-grep natively, groups matches by file
+    AstGrep {
+        /// ast-grep subcommand, pattern, path, and any flags (e.g. run -p '$$$', --json)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        extra_args: Vec<String>,
+    },
+
     /// Initialize rtk instructions for assistant CLI usage
     Init {
         /// Add to global assistant config directory instead of local project file
@@ -405,7 +425,7 @@ enum Commands {
         #[arg(long)]
         uninstall: bool,
 
-        /// Target Codex CLI (uses AGENTS.md + RTK.md, no Claude hook patching)
+        /// Target Codex CLI (uses PreToolUse hook + AGENTS.md + RTK.md)
         #[arg(long)]
         codex: bool,
 
@@ -953,6 +973,8 @@ enum Commands {
 enum HookCommands {
     /// Process Claude Code PreToolUse hook (reads JSON from stdin)
     Claude,
+    /// Process Codex CLI PreToolUse hook (reads JSON from stdin)
+    Codex,
     /// Process Cursor Agent hook (reads JSON from stdin)
     Cursor,
     /// Process Gemini CLI BeforeTool hook (reads JSON from stdin)
@@ -1722,20 +1744,58 @@ fn build_k8s_logs_args(pod: String, container: Option<String>) -> Vec<String> {
     args
 }
 
-/// Merge pnpm global filters args with other ones for standard String-based commands
-fn merge_pnpm_args(filters: &[String], args: &[String]) -> Vec<String> {
-    filters
-        .iter()
-        .map(|filter| format!("--filter={}", filter))
+/// Leading pnpm global flags (recursive / workspace-root), forwarded to pnpm.
+///
+/// These are appended *after* the subcommand by the callers (e.g. `run_install`
+/// builds `pnpm install <flags>`), i.e. `pnpm -r install` typed by the user runs
+/// as `pnpm install -r`. This is behavior-preserving: `-r`/`-w`/`--filter` are
+/// root-level pnpm options accepted in either position (same established pattern
+/// already used for `--filter`). Verified against pnpm 9.15.4: `pnpm install
+/// --help` lists `-r, --recursive`, `-w, --workspace-root` and `--filter` as
+/// options of `install` itself, and `pnpm <flag> <sub>` vs `pnpm <sub> <flag>`
+/// produce byte-identical output on `ls` and `outdated` for all three flags. If a
+/// future pnpm makes position significant, emit these before the subcommand
+/// instead (as the passthrough path already does via merge order).
+fn pnpm_global_flags(recursive: bool, workspace_root: bool) -> Vec<String> {
+    let mut flags = Vec::new();
+    if recursive {
+        flags.push("-r".to_string());
+    }
+    if workspace_root {
+        flags.push("-w".to_string());
+    }
+    flags
+}
+
+/// Merge pnpm global flags + filters with the subcommand args (String-based commands).
+fn merge_pnpm_args(
+    filters: &[String],
+    recursive: bool,
+    workspace_root: bool,
+    args: &[String],
+) -> Vec<String> {
+    pnpm_global_flags(recursive, workspace_root)
+        .into_iter()
+        .chain(filters.iter().map(|filter| format!("--filter={}", filter)))
         .chain(args.iter().cloned())
         .collect()
 }
 
-/// Merge pnpm global filters args with other ones, using OsString for passthrough compatibility
-fn merge_pnpm_args_os(filters: &[String], args: &[OsString]) -> Vec<OsString> {
-    filters
-        .iter()
-        .map(|filter| OsString::from(format!("--filter={}", filter)))
+/// Same as `merge_pnpm_args` but OsString-based, for passthrough compatibility.
+fn merge_pnpm_args_os(
+    filters: &[String],
+    recursive: bool,
+    workspace_root: bool,
+    args: &[OsString],
+) -> Vec<OsString> {
+    pnpm_global_flags(recursive, workspace_root)
+        .into_iter()
+        .map(OsString::from)
+        .chain(
+            filters
+                .iter()
+                .map(|filter| OsString::from(format!("--filter={}", filter))),
+        )
         .chain(args.iter().cloned())
         .collect()
 }
@@ -1758,6 +1818,33 @@ fn validate_pnpm_filters(filters: &[String], command: &PnpmCommands) -> Option<S
                 return Some(msg);
             }
             None
+        }
+        _ => None,
+    }
+}
+
+/// Warn when pnpm global flags (`-r`/`-w`) are dropped for subcommands that don't
+/// forward them (Typecheck delegates to `tsc` and ignores them), mirroring the
+/// `--filter` warning in `validate_pnpm_filters`. Not reachable via the hook
+/// rewriter (`typecheck` isn't a rewritten pnpm subcommand) but possible manually.
+fn validate_pnpm_globals(
+    recursive: bool,
+    workspace_root: bool,
+    command: &PnpmCommands,
+) -> Option<String> {
+    match command {
+        PnpmCommands::Typecheck { .. } if recursive || workspace_root => {
+            let mut flags = Vec::new();
+            if recursive {
+                flags.push("-r");
+            }
+            if workspace_root {
+                flags.push("-w");
+            }
+            Some(format!(
+                "[rtk] warning: pnpm tsc does not support {} — ignored",
+                flags.join(", ")
+            ))
         }
         _ => None,
     }
@@ -1848,8 +1935,11 @@ fn run_cli() -> Result<i32> {
     };
 
     // Warn if installed hook is outdated/missing (1/day, non-blocking).
-    // Skip for Gain — it shows its own inline hook warning.
-    if !matches!(cli.command, Commands::Gain { .. }) {
+    // Skip for Gain (shows its own inline warning), Init/Verify (manage the hook themselves).
+    if !matches!(
+        cli.command,
+        Commands::Gain { .. } | Commands::Init { .. } | Commands::Verify { .. }
+    ) {
         hooks::hook_check::maybe_warn();
     }
 
@@ -1870,6 +1960,7 @@ fn run_cli() -> Result<i32> {
             files,
             level,
             max_lines,
+            head_lines,
             tail_lines,
             line_numbers,
         } => {
@@ -1882,12 +1973,20 @@ fn run_cli() -> Result<i32> {
                         continue;
                     }
                     stdin_seen = true;
-                    read::run_stdin(level, max_lines, tail_lines, line_numbers, cli.verbose)
+                    read::run_stdin(
+                        level,
+                        max_lines,
+                        head_lines,
+                        tail_lines,
+                        line_numbers,
+                        cli.verbose,
+                    )
                 } else {
                     read::run(
                         file,
                         level,
                         max_lines,
+                        head_lines,
                         tail_lines,
                         line_numbers,
                         cli.verbose,
@@ -1898,11 +1997,7 @@ fn run_cli() -> Result<i32> {
                     had_error = true;
                 }
             }
-            if had_error {
-                1
-            } else {
-                0
-            }
+            if had_error { 1 } else { 0 }
         }
 
         Commands::Smart {
@@ -1957,90 +2052,100 @@ fn run_cli() -> Result<i32> {
             }
 
             match command {
-                GitCommands::Diff { args } => git::run(
-                    git::GitCommand::Diff,
+                GitCommands::Diff { args } => git_cmd::run(
+                    git_cmd::GitCommand::Diff,
                     &args,
                     None,
                     cli.verbose,
                     &global_args,
                 )?,
-                GitCommands::Log { args } => {
-                    git::run(git::GitCommand::Log, &args, None, cli.verbose, &global_args)?
+                GitCommands::Log { args } => git_cmd::run(
+                    git_cmd::GitCommand::Log,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Status { args } => git_cmd::run(
+                    git_cmd::GitCommand::Status,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Show { args } => git_cmd::run(
+                    git_cmd::GitCommand::Show,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Add { args } => git_cmd::run(
+                    git_cmd::GitCommand::Add,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Commit { args } => git_cmd::run(
+                    git_cmd::GitCommand::Commit,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Checkout { args } => git_cmd::run(
+                    git_cmd::GitCommand::Checkout,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Push { args } => git_cmd::run(
+                    git_cmd::GitCommand::Push,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Pull { args } => git_cmd::run(
+                    git_cmd::GitCommand::Pull,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Branch { args } => git_cmd::run(
+                    git_cmd::GitCommand::Branch,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Fetch { args } => git_cmd::run(
+                    git_cmd::GitCommand::Fetch,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Stash { subcommand, args } => git_cmd::run(
+                    git_cmd::GitCommand::Stash { subcommand },
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Worktree { args } => git_cmd::run(
+                    git_cmd::GitCommand::Worktree,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Other(args) => {
+                    git_cmd::run_passthrough(&args, &global_args, cli.verbose)?
                 }
-                GitCommands::Status { args } => git::run(
-                    git::GitCommand::Status,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Show { args } => git::run(
-                    git::GitCommand::Show,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Add { args } => {
-                    git::run(git::GitCommand::Add, &args, None, cli.verbose, &global_args)?
-                }
-                GitCommands::Commit { args } => git::run(
-                    git::GitCommand::Commit,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Checkout { args } => git::run(
-                    git::GitCommand::Checkout,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Push { args } => git::run(
-                    git::GitCommand::Push,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Pull { args } => git::run(
-                    git::GitCommand::Pull,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Branch { args } => git::run(
-                    git::GitCommand::Branch,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Fetch { args } => git::run(
-                    git::GitCommand::Fetch,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Stash { subcommand, args } => git::run(
-                    git::GitCommand::Stash { subcommand },
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Worktree { args } => git::run(
-                    git::GitCommand::Worktree,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
-                GitCommands::Other(args) => git::run_passthrough(&args, &global_args, cli.verbose)?,
             }
         }
 
@@ -2071,32 +2176,41 @@ fn run_cli() -> Result<i32> {
 
         Commands::Psql { args } => psql_cmd::run(&args, cli.verbose)?,
 
-        Commands::Pnpm { filter, command } => {
+        Commands::Pnpm {
+            filter,
+            recursive,
+            workspace_root,
+            command,
+        } => {
             // Warns user if filters are used with unsupported subcommands like typecheck
             if let Some(warning) = validate_pnpm_filters(&filter, &command) {
+                eprintln!("{}", warning);
+            }
+            if let Some(warning) = validate_pnpm_globals(recursive, workspace_root, &command) {
                 eprintln!("{}", warning);
             }
 
             match command {
                 PnpmCommands::List { depth, args } => pnpm_cmd::run(
                     pnpm_cmd::PnpmCommand::List { depth },
-                    &merge_pnpm_args(&filter, &args),
+                    &merge_pnpm_args(&filter, recursive, workspace_root, &args),
                     cli.verbose,
                 )?,
                 PnpmCommands::Outdated { args } => pnpm_cmd::run(
                     pnpm_cmd::PnpmCommand::Outdated,
-                    &merge_pnpm_args(&filter, &args),
+                    &merge_pnpm_args(&filter, recursive, workspace_root, &args),
                     cli.verbose,
                 )?,
                 PnpmCommands::Install { args } => pnpm_cmd::run(
                     pnpm_cmd::PnpmCommand::Install,
-                    &merge_pnpm_args(&filter, &args),
+                    &merge_pnpm_args(&filter, recursive, workspace_root, &args),
                     cli.verbose,
                 )?,
                 PnpmCommands::Typecheck { args } => tsc_cmd::run(Some("pnpm"), &args, cli.verbose)?,
-                PnpmCommands::Other(args) => {
-                    pnpm_cmd::run_passthrough(&merge_pnpm_args_os(&filter, &args), cli.verbose)?
-                }
+                PnpmCommands::Other(args) => pnpm_cmd::run_passthrough(
+                    &merge_pnpm_args_os(&filter, recursive, workspace_root, &args),
+                    cli.verbose,
+                )?,
             }
         }
 
@@ -2248,6 +2362,7 @@ fn run_cli() -> Result<i32> {
             &extra_args,
             cli.verbose,
         )?,
+        Commands::AstGrep { extra_args } => ast_grep_cmd::run(&extra_args)?,
         Commands::Rg { extra_args } => {
             search::run(search::Engine::Rg, 80, 200, false, &extra_args, cli.verbose)?
         }
@@ -2768,6 +2883,10 @@ fn run_cli() -> Result<i32> {
                 hooks::hook_cmd::run_claude()?;
                 0
             }
+            HookCommands::Codex => {
+                hooks::hook_cmd::run_codex()?;
+                0
+            }
             HookCommands::Cursor => {
                 hooks::hook_cmd::run_cursor()?;
                 0
@@ -2923,11 +3042,17 @@ fn run_cli() -> Result<i32> {
                 unsafe extern "C" fn handle_signal(sig: libc::c_int) {
                     let pid = PROXY_CHILD_PID.load(Ordering::SeqCst);
                     if pid != 0 {
-                        libc::kill(pid as libc::pid_t, libc::SIGTERM);
-                        libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), 0);
+                        // nosemgrep: unsafe-block
+                        unsafe {
+                            libc::kill(pid as libc::pid_t, libc::SIGTERM);
+                            libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), 0);
+                        }
                     }
-                    libc::signal(sig, libc::SIG_DFL);
-                    libc::raise(sig);
+                    // nosemgrep: unsafe-block
+                    unsafe {
+                        libc::signal(sig, libc::SIG_DFL);
+                        libc::raise(sig);
+                    }
                 }
                 // nosemgrep: unsafe-block
                 unsafe {
@@ -3117,6 +3242,7 @@ fn is_operational_command(cmd: &Commands) -> bool {
             | Commands::Summary { .. }
             | Commands::Grep { .. }
             | Commands::Rg { .. }
+            | Commands::AstGrep { .. }
             | Commands::Wget { .. }
             | Commands::Vitest { .. }
             | Commands::Ctest { .. }
@@ -3251,6 +3377,46 @@ mod tests {
                 assert!(!literal_pathspecs);
             }
             _ => panic!("Expected Git command"),
+        }
+    }
+
+    #[test]
+    fn test_pnpm_recursive_install_parsing() {
+        // The rewriter emits `rtk pnpm -r install` for `pnpm -r install`; it must parse
+        // to Install with recursive=true (not error, not Other) so `-r` is forwarded.
+        let cli = Cli::try_parse_from(["rtk", "pnpm", "-r", "install"]).unwrap();
+        match cli.command {
+            Commands::Pnpm {
+                recursive,
+                workspace_root,
+                command,
+                ..
+            } => {
+                assert!(recursive);
+                assert!(!workspace_root);
+                assert!(matches!(command, PnpmCommands::Install { .. }));
+            }
+            _ => panic!("Expected Pnpm command"),
+        }
+    }
+
+    #[test]
+    fn test_pnpm_workspace_root_filter_install_parsing() {
+        let cli =
+            Cli::try_parse_from(["rtk", "pnpm", "-w", "--filter", "@app", "install"]).unwrap();
+        match cli.command {
+            Commands::Pnpm {
+                filter,
+                recursive,
+                workspace_root,
+                command,
+            } => {
+                assert!(!recursive);
+                assert!(workspace_root);
+                assert_eq!(filter, vec!["@app".to_string()]);
+                assert!(matches!(command, PnpmCommands::Install { .. }));
+            }
+            _ => panic!("Expected Pnpm command"),
         }
     }
 
@@ -3590,6 +3756,7 @@ mod tests {
             "tree",
             "read",
             "rg",
+            "ast-grep",
             "git",
             "gh",
             "glab",
@@ -3712,6 +3879,17 @@ mod tests {
             cli.command,
             Commands::Hook {
                 command: HookCommands::Claude
+            }
+        ));
+    }
+
+    #[test]
+    fn test_hook_codex_parses() {
+        let cli = Cli::try_parse_from(["rtk", "hook", "codex"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Hook {
+                command: HookCommands::Codex
             }
         ));
     }
@@ -3881,7 +4059,10 @@ mod tests {
         let filters = vec![];
         let args = vec!["--depth=0".to_string(), "--no-verbose".to_string()];
         let expected_args = vec!["--depth=0", "--no-verbose"];
-        assert_eq!(merge_pnpm_args(&filters, &args), expected_args);
+        assert_eq!(
+            merge_pnpm_args(&filters, false, false, &args),
+            expected_args
+        );
     }
 
     #[test]
@@ -3899,7 +4080,10 @@ mod tests {
             "--depth=0",
             "--no-verbose",
         ];
-        assert_eq!(merge_pnpm_args(&filters, &args), expected_args);
+        assert_eq!(
+            merge_pnpm_args(&filters, false, false, &args),
+            expected_args
+        );
     }
 
     #[test]
@@ -3907,7 +4091,10 @@ mod tests {
         let filters = vec![];
         let args = vec![OsString::from("--depth=0")];
         let expected_args = vec![OsString::from("--depth=0")];
-        assert_eq!(merge_pnpm_args_os(&filters, &args), expected_args);
+        assert_eq!(
+            merge_pnpm_args_os(&filters, false, false, &args),
+            expected_args
+        );
     }
 
     #[test]
@@ -3918,7 +4105,39 @@ mod tests {
             OsString::from("--filter=@app1"),
             OsString::from("--depth=0"),
         ];
-        assert_eq!(merge_pnpm_args_os(&filters, &args), expected_args);
+        assert_eq!(
+            merge_pnpm_args_os(&filters, false, false, &args),
+            expected_args
+        );
+    }
+
+    #[test]
+    fn test_merge_recursive_workspace_root_ordering() {
+        // Global flags come first, then filters, then the subcommand args —
+        // executed as `pnpm <sub> -r -w --filter=@app <args>` (position-independent,
+        // verified empirically; see pnpm_global_flags docs).
+        let filters = vec!["@app".to_string()];
+        let args = vec!["--depth=0".to_string()];
+        assert_eq!(
+            merge_pnpm_args(&filters, true, true, &args),
+            vec!["-r", "-w", "--filter=@app", "--depth=0"]
+        );
+        // No flags → unchanged from the filters-only behavior.
+        assert_eq!(merge_pnpm_args(&[], false, false, &args), vec!["--depth=0"]);
+    }
+
+    #[test]
+    fn test_validate_pnpm_globals_warns_on_typecheck() {
+        let cmd = PnpmCommands::Typecheck { args: vec![] };
+        assert!(validate_pnpm_globals(true, false, &cmd).is_some());
+        assert!(validate_pnpm_globals(false, true, &cmd).is_some());
+        // Both flags at once: single warning naming both.
+        let both = validate_pnpm_globals(true, true, &cmd).unwrap();
+        assert!(both.contains("-r") && both.contains("-w"));
+        assert!(validate_pnpm_globals(false, false, &cmd).is_none());
+        // Non-typecheck subcommands forward the flags → no warning.
+        let install = PnpmCommands::Install { args: vec![] };
+        assert!(validate_pnpm_globals(true, true, &install).is_none());
     }
 
     #[test]
@@ -3932,6 +4151,7 @@ mod tests {
             Commands::Pnpm {
                 filter,
                 command: PnpmCommands::List { depth, args },
+                ..
             } => {
                 assert_eq!(depth, 0);
                 assert_eq!(filter, vec!["@app1", "@app2"]);
@@ -3992,7 +4212,9 @@ mod tests {
         ])
         .unwrap();
         match cli.command {
-            Commands::Pnpm { filter, command } => {
+            Commands::Pnpm {
+                filter, command, ..
+            } => {
                 let warning = validate_pnpm_filters(&filter, &command);
 
                 assert!(filter.is_empty());
@@ -4019,11 +4241,16 @@ mod tests {
         ])
         .unwrap();
         match cli.command {
-            Commands::Pnpm { filter, command } => {
+            Commands::Pnpm {
+                filter, command, ..
+            } => {
                 let warning = validate_pnpm_filters(&filter, &command).unwrap();
 
                 assert_eq!(filter, vec!["@app1", "@app2"]);
-                assert_eq!(warning, "[rtk] warning: --filter is not yet supported for pnpm tsc, filters preceding the subcommand will be ignored")
+                assert_eq!(
+                    warning,
+                    "[rtk] warning: --filter is not yet supported for pnpm tsc, filters preceding the subcommand will be ignored"
+                )
             }
             _ => panic!("Expected Pnpm Build command"),
         }
