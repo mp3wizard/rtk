@@ -60,10 +60,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-09-12 |
-| Status | PASSED |
-| Summary | Merged upstream (git-show blob-decode hardening, hook-decision consolidation, winget packaging); 0 CVEs, 0 dependency vulnerabilities, 0 verified secrets — gitleaks/semgrep/bandit hits triaged as false-positive test fixtures or a deferred CI-hardening item |
-| Report | [Security reports/security-audit-2026-09-12.md](Security%20reports/security-audit-2026-09-12.md) |
+| Last audit | 2026-09-18 |
+| Status | ISSUES FIXED |
+| Summary | Merged 58 upstream commits (edition 2024 migration, ast-grep support, Codex hooks, dotnet/pnpm fixes); fixed 1 dependency CVE (rustls RUSTSEC-2026-0285, 0.23.37→0.23.45), 0 verified secrets — gitleaks/bandit hits triaged as false-positive test fixtures; Trivy skipped this run (network) |
+| Report | [Security reports/security-audit-2026-09-18.md](Security%20reports/security-audit-2026-09-18.md) |
 
 ## How Savings Work
 
