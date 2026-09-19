@@ -216,12 +216,11 @@ fn run_inner(
                 stream::run_streaming(&mut cmd, StdinMode::Null, FilterMode::Streaming(filter))
                     .with_context(|| format!("Failed to run {}", tool_name))?;
 
-            if let Some(label) = opts.tee_label {
-                if let Some(hint) =
+            if let Some(label) = opts.tee_label
+                && let Some(hint) =
                     crate::core::tee::tee_and_hint(&result.raw, label, result.exit_code)
-                {
-                    println!("{}", hint);
-                }
+            {
+                println!("{}", hint);
             }
 
             timer.track(
@@ -286,7 +285,7 @@ pub fn run_passthrough(tool: &str, args: &[std::ffi::OsString], verbose: u8) -> 
         eprintln!("{} passthrough: {:?}", tool, args);
     }
     let mut cmd = crate::core::utils::resolved_command(tool);
-    cmd.args(args);
+    crate::core::utils::ChildArgExt::child_args(&mut cmd, args);
     let args_str = tracking::args_display(args);
     run(
         cmd,
