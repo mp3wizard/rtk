@@ -5,10 +5,10 @@
 
 use crate::core::arg_tokenizer::{self, Dialect, Token, TokenKind, ValueSpec};
 use crate::core::stream::{
-    self, exec_capture, exec_capture_stdin, CaptureResult, FilterMode, StdinMode, StreamFilter,
+    self, CaptureResult, FilterMode, StdinMode, StreamFilter, exec_capture, exec_capture_stdin,
 };
 use crate::core::tracking;
-use crate::core::utils::{resolved_command, strip_ansi};
+use crate::core::utils::{ChildArgExt, resolved_command, strip_ansi};
 use crate::core::{args_utils, config};
 use anyhow::{Context, Result};
 use regex::Regex;
@@ -291,7 +291,10 @@ fn extract_pattern_path<T: AsRef<str>>(
                         recursive = true;
                     }
                 }
-                if cluster.iter().any(|c| is_context_token(engine, c.kind, c.text)) {
+                if cluster
+                    .iter()
+                    .any(|c| is_context_token(engine, c.kind, c.text))
+                {
                     context = true;
                 }
                 let (bool_chars, value_char) = match cluster.split_last() {
@@ -428,19 +431,19 @@ fn engine_command<T: AsRef<str>>(
     line_buffered: bool,
 ) -> Command {
     let mut cmd = resolved_command(engine.bin());
-    cmd.args(engine.parse_flags());
+    cmd.child_args(engine.parse_flags());
     for a in extra_args {
-        cmd.arg(a.as_ref());
+        cmd.child_arg(a.as_ref());
     }
     if line_buffered {
         // The engine writes through a pipe, so flush each match immediately.
-        cmd.arg("--line-buffered");
+        cmd.child_arg("--line-buffered");
     }
     for p in patterns {
-        cmd.args(["-e", p]);
+        cmd.child_args(["-e", p]);
     }
-    cmd.arg("--");
-    cmd.args(paths);
+    cmd.child_arg("--");
+    cmd.child_args(paths);
     cmd
 }
 
@@ -556,10 +559,10 @@ fn passthrough<T: AsRef<str>>(
     let mut cmd = resolved_command(engine.bin());
     if stream_stdin && !std::io::stdout().is_terminal() {
         // Keep passthrough output live when stdout is piped.
-        cmd.arg("--line-buffered");
+        cmd.child_arg("--line-buffered");
     }
     for a in args {
-        cmd.arg(a.as_ref());
+        cmd.child_arg(a.as_ref());
     }
 
     let exit_code = if stream_stdin {
@@ -595,10 +598,12 @@ pub fn run(
     // scoped before the boundary, because `rtk grep -- --version` searches *for* that string.
     // `-h` is engine-specific: rg's is --help, grep's is --no-filename.
     let help_tokens = tokenize_search_args(args, engine);
-    let asks_for_help = arg_tokenizer::before_dashdash(&help_tokens).iter().any(|t| {
-        (t.kind == TokenKind::Long && matches!(t.text, "version" | "help"))
-            || (t.kind == TokenKind::Short && t.text == "h" && engine == Engine::Rg)
-    });
+    let asks_for_help = arg_tokenizer::before_dashdash(&help_tokens)
+        .iter()
+        .any(|t| {
+            (t.kind == TokenKind::Long && matches!(t.text, "version" | "help"))
+                || (t.kind == TokenKind::Short && t.text == "h" && engine == Engine::Rg)
+        });
     let dangling_value_flag = help_tokens.iter().any(|t| {
         matches!(t.kind, TokenKind::Long | TokenKind::Short)
             && search_takes_value(engine, t.kind, t.text).is_some()
@@ -611,7 +616,7 @@ pub fn run(
 
     if asks_for_help {
         let mut cmd = resolved_command(engine.bin());
-        cmd.args(args);
+        cmd.child_args(args);
         let result = exec_capture(&mut cmd).context("search failed")?;
         print!("{}", result.stdout);
         if !result.stderr.is_empty() {
@@ -876,7 +881,9 @@ fn is_format_flag_token(engine: Engine, kind: TokenKind, text: &str) -> bool {
         // grep's `--initial-tab` pads and tabs every match line, so RTK's own `-H --null -n`
         // parse reads nothing back and leaked the injected flags into the output. ripgrep has
         // no such flag, and its `-T` is `--type-not`, a value-taking flag (see rg_takes_value).
-        TokenKind::Long => LONG.contains(&text) || (engine == Engine::Grep && text == "initial-tab"),
+        TokenKind::Long => {
+            LONG.contains(&text) || (engine == Engine::Grep && text == "initial-tab")
+        }
         // -c count, -l/-L lists, -o only-matching, -q quiet, -b byte-offset, -Z NUL are shared;
         // -L/-T/-z mean something unrelated to output shape for rg specifically (see above).
         TokenKind::Short => match text {
@@ -1001,12 +1008,12 @@ fn has_format_flag<T: AsRef<str>>(engine: Engine, extra_args: &[T]) -> bool {
 fn clean_line(line: &str, max_len: usize, context_re: Option<&Regex>, pattern: &str) -> String {
     let trimmed = line.trim();
 
-    if let Some(re) = context_re {
-        if let Some(m) = re.find(trimmed) {
-            let matched = m.as_str();
-            if matched.len() <= max_len {
-                return matched.to_string();
-            }
+    if let Some(re) = context_re
+        && let Some(m) = re.find(trimmed)
+    {
+        let matched = m.as_str();
+        if matched.len() <= max_len {
+            return matched.to_string();
         }
     }
 
@@ -1080,8 +1087,6 @@ mod tests {
         let compact = compact_path(path);
         assert!(compact.len() <= 60);
     }
-
-
 
     #[test]
     fn streaming_search_preserves_native_shape() {
@@ -1227,8 +1232,7 @@ mod tests {
         assert_eq!(detected.show_file, Some(false));
         assert!(!flags.iter().any(|f| f == "--no-filename"));
 
-        let (_, _, flags, _, detected) =
-            extract_pattern_path(&["-ih", "x", "a.txt"], Engine::Grep);
+        let (_, _, flags, _, detected) = extract_pattern_path(&["-ih", "x", "a.txt"], Engine::Grep);
         assert_eq!(detected.show_file, Some(false));
         assert_eq!(flags, vec!["-i"], "the rest of the cluster survives");
 
@@ -1708,7 +1712,10 @@ mod tests {
         // Same for show_file's -H/-r/-R and show_line's -n/-N letters.
         let (_, _, _, _, detected) =
             extract_pattern_path(&["--replace", "-Hart", "pattern", "src"], Engine::Rg);
-        assert_eq!(detected.show_file, None, "--replace's value must not trigger -H");
+        assert_eq!(
+            detected.show_file, None,
+            "--replace's value must not trigger -H"
+        );
 
         let (_, _, _, _, detected) =
             extract_pattern_path(&["--replace", "-normal", "pattern", "src"], Engine::Rg);
@@ -1874,8 +1881,14 @@ mod tests {
         for negation in ["-N", "--no-line-number"] {
             let (_, _, flags, _, detected) =
                 extract_pattern_path(&["pattern", "-n", negation], Engine::Grep);
-            assert!(detected.show_line, "{negation} is not grep's, so -n still stands");
-            assert!(flags.iter().any(|f| f == negation), "{negation} must reach grep");
+            assert!(
+                detected.show_line,
+                "{negation} is not grep's, so -n still stands"
+            );
+            assert!(
+                flags.iter().any(|f| f == negation),
+                "{negation} must reach grep"
+            );
         }
     }
 

@@ -31,7 +31,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -202,7 +202,7 @@ pub struct GainSummary {
     pub total_time_ms: u64,
     /// Average execution time per command (milliseconds)
     pub avg_time_ms: u64,
-    /// Top 10 commands by tokens saved: (cmd, count, saved, avg_pct, avg_time_ms)
+    /// Top 10 commands by tokens saved: (cmd, count, saved, weighted_rate, avg_time_ms)
     pub by_command: Vec<(String, usize, usize, f64, u64)>,
     /// Last 30 days of activity: (date, saved_tokens)
     pub by_day: Vec<(String, usize)>,
@@ -295,7 +295,16 @@ pub struct MonthStats {
     pub avg_time_ms: u64,
 }
 
-/// Type alias for command statistics tuple: (command, count, saved_tokens, avg_savings_pct, avg_time_ms)
+/// Type alias for command statistics tuple: (command, count, saved_tokens, weighted_savings_rate, avg_time_ms)
+///
+/// # Warning
+/// The 4th field is a **weighted** savings rate: `SUM(saved_tokens) / SUM(input_tokens) * 100.0`,
+/// guarded so that a group whose every row has zero input reports 0.0 rather than NULL.
+/// Do NOT aggregate this column with `AVG()` — that would produce an unweighted mean that
+/// under-weights high-volume commands. Always recompute it as
+/// `CASE WHEN SUM(input_tokens) > 0 THEN SUM(saved_tokens) / SUM(input_tokens) * 100.0 ELSE 0.0 END`
+/// instead. `saved_tokens` is signed, so the rate can be negative where the 3rd field, being
+/// unsigned, is clamped to 0.
 type CommandStats = (String, usize, usize, f64, u64);
 
 /// Current tracking-DB schema version, stored in the SQLite `user_version` pragma.
@@ -893,7 +902,9 @@ impl Tracker {
     ) -> Result<Vec<CommandStats>> {
         let (project_exact, project_glob) = project_filter_params(project_path); // added
         let mut stmt = self.conn.prepare(
-            "SELECT rtk_cmd, COUNT(*), SUM(saved_tokens), AVG(savings_pct), AVG(exec_time_ms)
+            "SELECT rtk_cmd, COUNT(*), SUM(saved_tokens),
+                    CASE WHEN SUM(input_tokens) > 0 THEN SUM(saved_tokens) * 100.0 / SUM(input_tokens) ELSE 0.0 END,
+                    AVG(exec_time_ms)
              FROM commands
              WHERE (?1 IS NULL OR project_path = ?1 OR project_path GLOB ?2)
              GROUP BY rtk_cmd
@@ -1312,12 +1323,21 @@ impl Tracker {
     }
 
     /// Count commands with low savings (<30%) — filters that need improvement.
+    ///
+    /// Uses the same weighted rate as `get_by_command`, `SUM(saved_tokens) / SUM(input_tokens)`
+    /// over every call of the command, so that a handful of 0%-savings passthrough calls don't
+    /// dilute a filter that genuinely performs well on high-volume invocations, and so that the
+    /// figure sent here is the one `rtk gain` prints for the same command. A net-regressing
+    /// command (negative rate) is listed: it is the filter most in need of improvement. Exact
+    /// 0% is left out, `passthrough_top` already reports it, and a command whose calls never
+    /// had any input carries no signal, so it is skipped rather than reported as 0%.
     pub fn low_savings_commands(&self, limit: usize) -> Result<Vec<(String, f64)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT rtk_cmd, AVG(savings_pct) as avg_sav FROM commands
-             WHERE input_tokens > 0
+            "SELECT rtk_cmd,
+                    SUM(saved_tokens) * 100.0 / SUM(input_tokens) AS sav
+             FROM commands
              GROUP BY rtk_cmd
-             HAVING avg_sav < 30.0 AND avg_sav > 0.0
+             HAVING SUM(input_tokens) > 0 AND sav < 30.0 AND sav <> 0.0
              ORDER BY COUNT(*) DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit as i64], |row| {
@@ -1329,7 +1349,15 @@ impl Tracker {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
-    /// Average savings percentage per command (unweighted — each command name counts once).
+    /// Average savings percentage per command (unweighted across command names — each distinct
+    /// command counts once, regardless of how many times it was invoked).
+    ///
+    /// The *inner* rate per command is weighted by volume (`SUM(saved)/SUM(input)`) so that
+    /// passthrough calls don't dilute a command's own rate. The *outer* average across command
+    /// names stays unweighted — this is intentional: it gives equal weight to every filter
+    /// instead of being dominated by the most-called one. Documented in `docs/TELEMETRY.md`.
+    /// A command whose calls never had any input carries no signal about its filter and is
+    /// skipped, not counted as 0%.
     ///
     /// Keeps the honest signed value: a command whose filter consistently emits
     /// more than it saves yields a negative average, mirroring `overall_savings_pct`
@@ -1338,10 +1366,12 @@ impl Tracker {
     /// not on a `0..=100` floor.
     pub fn avg_savings_per_command(&self) -> Result<f64> {
         let avg: f64 = self.conn.query_row(
-            "SELECT COALESCE(AVG(avg_sav), 0.0) FROM (
-                SELECT rtk_cmd, AVG(savings_pct) as avg_sav
-                FROM commands WHERE input_tokens > 0
+            "SELECT COALESCE(AVG(cmd_rate), 0.0) FROM (
+                SELECT rtk_cmd,
+                       SUM(saved_tokens) * 100.0 / SUM(input_tokens) AS cmd_rate
+                FROM commands
                 GROUP BY rtk_cmd
+                HAVING SUM(input_tokens) > 0
             )",
             [],
             |row| row.get(0),
@@ -2024,19 +2054,16 @@ mod tests {
         ));
         // nosemgrep: filesystem-deletion -- test-only cleanup of this test's own throwaway temp DB file, not production/user data.
         let _ = std::fs::remove_file(&db_path);
-        env::set_var("RTK_DB_PATH", &db_path);
+        temp_env::with_var("RTK_DB_PATH", Some(&db_path), || {
+            let timer = TimedExecution::start();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            timer.track("test cmd", "rtk test", "raw input data", "filtered");
 
-        let timer = TimedExecution::start();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        timer.track("test cmd", "rtk test", "raw input data", "filtered");
-
-        // Verify via DB that record exists
-        let tracker = Tracker::new().expect("Failed to create tracker");
-        let recent = tracker.get_recent(5).expect("Failed to get recent");
-        assert!(recent.iter().any(|r| r.rtk_cmd == "rtk test"));
-
-        drop(tracker);
-        env::remove_var("RTK_DB_PATH");
+            // Verify via DB that record exists
+            let tracker = Tracker::new().expect("Failed to create tracker");
+            let recent = tracker.get_recent(5).expect("Failed to get recent");
+            assert!(recent.iter().any(|r| r.rtk_cmd == "rtk test"));
+        });
         // nosemgrep: filesystem-deletion -- test-only cleanup of this test's own throwaway temp DB file, not production/user data.
         let _ = std::fs::remove_file(&db_path);
     }
@@ -2053,49 +2080,48 @@ mod tests {
         ));
         // nosemgrep: filesystem-deletion -- test-only cleanup of this test's own throwaway temp DB file, not production/user data.
         let _ = std::fs::remove_file(&db_path);
-        env::set_var("RTK_DB_PATH", &db_path);
+        temp_env::with_var("RTK_DB_PATH", Some(&db_path), || {
+            let timer = TimedExecution::start();
+            timer.track_passthrough("git tag", "rtk git tag (passthrough)");
 
-        let timer = TimedExecution::start();
-        timer.track_passthrough("git tag", "rtk git tag (passthrough)");
+            let tracker = Tracker::new().expect("Failed to create tracker");
+            let recent = tracker.get_recent(5).expect("Failed to get recent");
 
-        let tracker = Tracker::new().expect("Failed to create tracker");
-        let recent = tracker.get_recent(5).expect("Failed to get recent");
+            let pt = recent
+                .iter()
+                .find(|r| r.rtk_cmd.contains("passthrough"))
+                .expect("Passthrough record not found");
 
-        let pt = recent
-            .iter()
-            .find(|r| r.rtk_cmd.contains("passthrough"))
-            .expect("Passthrough record not found");
-
-        // savings_pct should be 0 for passthrough
-        assert_eq!(pt.savings_pct, 0.0);
-        assert_eq!(pt.saved_tokens, 0);
-
-        drop(tracker);
-        env::remove_var("RTK_DB_PATH");
+            // savings_pct should be 0 for passthrough
+            assert_eq!(pt.savings_pct, 0.0);
+            assert_eq!(pt.saved_tokens, 0);
+        });
         // nosemgrep: filesystem-deletion -- test-only cleanup of this test's own throwaway temp DB file, not production/user data.
         let _ = std::fs::remove_file(&db_path);
     }
 
     // 7. get_db_path respects environment variable RTK_DB_PATH
     // 8. get_db_path falls back to default when no custom config
-    // Combined into one test to avoid env var race between parallel tests
+    // Combined into one test so the set and unset cases cannot interleave.
     #[test]
     fn test_db_path_env_and_default() {
         use std::env;
         let _guard = ENV_LOCK.lock().unwrap();
 
         let custom_path = env::temp_dir().join("rtk_test_custom.db");
-        env::set_var("RTK_DB_PATH", &custom_path);
-        let db_path = get_db_path().expect("Failed to get db path");
-        assert_eq!(db_path, custom_path);
+        temp_env::with_var("RTK_DB_PATH", Some(&custom_path), || {
+            let db_path = get_db_path().expect("Failed to get db path");
+            assert_eq!(db_path, custom_path);
+        });
 
-        env::remove_var("RTK_DB_PATH");
-        let db_path = get_db_path().expect("Failed to get db path");
-        assert!(
-            db_path.ends_with("rtk/history.db"),
-            "expected default path ending with rtk/history.db, got: {}",
-            db_path.display()
-        );
+        temp_env::with_var_unset("RTK_DB_PATH", || {
+            let db_path = get_db_path().expect("Failed to get db path");
+            assert!(
+                db_path.ends_with("rtk/history.db"),
+                "expected default path ending with rtk/history.db, got: {}",
+                db_path.display()
+            );
+        });
     }
 
     // 8b. Tracker::new() gates schema migration behind PRAGMA user_version, so a
@@ -2110,24 +2136,22 @@ mod tests {
             env::temp_dir().join(format!("rtk_test_schema_version_{}.db", std::process::id()));
         // nosemgrep: filesystem-deletion -- test-only cleanup of this test's own throwaway temp DB file, not production/user data.
         let _ = std::fs::remove_file(&db_path);
-        env::set_var("RTK_DB_PATH", &db_path);
+        temp_env::with_var("RTK_DB_PATH", Some(&db_path), || {
+            let tracker = Tracker::new().expect("first open should run migrations");
+            let version: i64 = tracker
+                .conn
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .expect("user_version should be readable");
+            assert_eq!(version, SCHEMA_VERSION);
+            drop(tracker);
 
-        let tracker = Tracker::new().expect("first open should run migrations");
-        let version: i64 = tracker
-            .conn
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .expect("user_version should be readable");
-        assert_eq!(version, SCHEMA_VERSION);
-        drop(tracker);
-
-        // Second open on the same file must skip migrations without erroring, and
-        // the DB must still be fully usable (tables from the first open persist).
-        let tracker2 = Tracker::new().expect("second open should skip migrations cleanly");
-        tracker2
-            .record("git status", "rtk git status", 100, 20, 50)
-            .expect("commands table should already exist and accept writes");
-
-        env::remove_var("RTK_DB_PATH");
+            // Second open on the same file must skip migrations without erroring, and
+            // the DB must still be fully usable (tables from the first open persist).
+            let tracker2 = Tracker::new().expect("second open should skip migrations cleanly");
+            tracker2
+                .record("git status", "rtk git status", 100, 20, 50)
+                .expect("commands table should already exist and accept writes");
+        });
         // nosemgrep: filesystem-deletion -- test-only cleanup of this test's own throwaway temp DB file, not production/user data.
         let _ = std::fs::remove_file(&db_path);
     }
@@ -2409,10 +2433,12 @@ mod tests {
     fn test_earliest_hook_decision_timestamp() {
         let tracker = Tracker::new_in_memory().expect("Failed to create in-memory tracker");
 
-        assert!(tracker
-            .earliest_hook_decision_timestamp()
-            .expect("query failed")
-            .is_none());
+        assert!(
+            tracker
+                .earliest_hook_decision_timestamp()
+                .expect("query failed")
+                .is_none()
+        );
 
         tracker
             .record_hook_decision(
@@ -2426,10 +2452,12 @@ mod tests {
             )
             .expect("Failed to record hook decision");
 
-        assert!(tracker
-            .earliest_hook_decision_timestamp()
-            .expect("query failed")
-            .is_some());
+        assert!(
+            tracker
+                .earliest_hook_decision_timestamp()
+                .expect("query failed")
+                .is_some()
+        );
     }
 
     #[test]
@@ -2450,10 +2478,12 @@ mod tests {
 
         tracker.reset_all().expect("Failed to reset");
 
-        assert!(tracker
-            .earliest_hook_decision_timestamp()
-            .expect("query failed")
-            .is_none());
+        assert!(
+            tracker
+                .earliest_hook_decision_timestamp()
+                .expect("query failed")
+                .is_none()
+        );
     }
 
     // rtk-ai/rtk#3206 review: hook_decisions grows unbounded for a user whose
@@ -2534,5 +2564,259 @@ mod tests {
         for cmd in ["rtk bun install", "rtk bunx cowsay", "rtk deno test"] {
             assert_eq!(categorize_command(cmd), "js", "{cmd}");
         }
+    }
+
+    // 14. get_by_command uses weighted savings rate, not unweighted average
+    //
+    // Regression test for: AVG(savings_pct) gave wrong results when small invocations
+    // with 0% savings diluted the average of high-volume commands.
+    //
+    // Setup: one small command (10% savings) + one large command (95% savings).
+    // Unweighted avg would be ~52.5%. Weighted rate must be ~95%.
+    //
+    // Rows carry a project path so the project-filtered form of the query is the one
+    // under test.
+    #[test]
+    fn test_get_by_command_weighted_savings_rate() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create tracker");
+        let cmd_name = "weighted_test";
+        let project = "/tmp/rtk_weighted_test";
+
+        // Override project_path by inserting directly via conn
+        let saved_small = 10_i64; // 100 in - 90 out = 10 saved → 10%
+        let saved_large = 95_000_i64; // 100_000 in - 5_000 out = 95_000 saved → 95%
+        tracker
+            .conn
+            .execute(
+                "INSERT INTO commands (timestamp, original_cmd, rtk_cmd, project_path, input_tokens, output_tokens, saved_tokens, savings_pct, exec_time_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params![
+                    chrono::Utc::now().to_rfc3339(),
+                    cmd_name, cmd_name, project,
+                    100_i64, 90_i64, saved_small, 10.0_f64, 5_i64
+                ],
+            )
+            .expect("Failed to insert small invocation");
+        tracker
+            .conn
+            .execute(
+                "INSERT INTO commands (timestamp, original_cmd, rtk_cmd, project_path, input_tokens, output_tokens, saved_tokens, savings_pct, exec_time_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params![
+                    chrono::Utc::now().to_rfc3339(),
+                    cmd_name, cmd_name, project,
+                    100_000_i64, 5_000_i64, saved_large, 95.0_f64, 10_i64
+                ],
+            )
+            .expect("Failed to insert large invocation");
+
+        let by_cmd = tracker
+            .get_by_command(Some(project))
+            .expect("Failed to get by_command stats");
+
+        let entry = by_cmd
+            .iter()
+            .find(|(name, _, _, _, _)| name == cmd_name)
+            .expect("Test command not found in by_command stats");
+
+        let (_name, _count, _saved, rate, _time) = entry;
+
+        // Weighted rate = (10 + 95_000) / (100 + 100_000) * 100.0 ≈ 94.9%
+        // Unweighted avg would be (10.0 + 95.0) / 2 = 52.5%
+        // The gap proves the fix works.
+        assert!(
+            *rate > 90.0,
+            "Expected weighted rate >90%, got {:.1}% — unweighted avg would be ~52.5%",
+            rate
+        );
+    }
+
+    // 15. The weighted rate tracks SUM(saved_tokens), not the mean of per-call percentages
+    //
+    // A long-tailed pair under one rtk_cmd: a 1M-token call saving 90% and a 100-token
+    // call saving 10%. The mean of the two percentages is 50%; the weighted rate is
+    // ~89.99% and is the figure consistent with the Saved column in the same row.
+    #[test]
+    fn test_weighted_rate_via_get_by_command() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create tracker");
+
+        tracker
+            .record("grep huge", "rtk grep", 1_000_000, 100_000, 50)
+            .expect("record huge");
+        tracker
+            .record("grep tiny", "rtk grep", 100, 90, 5)
+            .expect("record tiny");
+
+        let by_command = tracker.get_by_command(None).expect("get_by_command");
+
+        let (_cmd, count, saved, pct, _avg_time) = by_command
+            .iter()
+            .find(|(cmd, ..)| cmd == "rtk grep")
+            .expect("rtk grep row not found");
+
+        assert_eq!(*count, 2);
+        assert_eq!(*saved, 900_010);
+        let expected = 900_010.0 / 1_000_100.0 * 100.0;
+        assert!(
+            (pct - expected).abs() < 0.01,
+            "expected weighted rate ~{expected:.2}, got {pct:.2}"
+        );
+        assert!(
+            (pct - 50.0).abs() > 1.0,
+            "mean-of-percentages regression: got {pct:.2}"
+        );
+    }
+
+    // 16. The rate reaches the gain summary through get_summary(), not only get_by_command
+    #[test]
+    fn test_weighted_rate_via_get_summary() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create tracker");
+
+        tracker
+            .record("large grep", "rtk grep", 1000, 100, 10)
+            .expect("Failed to record large command");
+        tracker
+            .record("small grep", "rtk grep", 10, 9, 20)
+            .expect("Failed to record small command");
+
+        let summary = tracker.get_summary().expect("Failed to get summary");
+        let (_, count, saved, savings_pct, _) = summary
+            .by_command
+            .iter()
+            .find(|(command, _, _, _, _)| command == "rtk grep")
+            .expect("rtk grep stats not found");
+
+        assert_eq!(*count, 2);
+        assert_eq!(*saved, 901);
+        let expected_pct = 901.0 / 1010.0 * 100.0;
+        assert!(
+            (savings_pct - expected_pct).abs() < 1e-10,
+            "expected weighted rate {expected_pct}, got {savings_pct}"
+        );
+    }
+
+    // 17. A group whose every call has zero input reports 0%, not a division by zero
+    #[test]
+    fn test_by_command_zero_input_has_zero_savings_percentage() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create tracker");
+        tracker
+            .record("interactive command", "rtk proxy", 0, 0, 5)
+            .expect("Failed to record passthrough command");
+
+        let summary = tracker.get_summary().expect("Failed to get summary");
+        let (_, _, _, savings_pct, _) = summary
+            .by_command
+            .iter()
+            .find(|(command, _, _, _, _)| command == "rtk proxy")
+            .expect("rtk proxy stats not found");
+
+        assert_eq!(*savings_pct, 0.0);
+    }
+
+    // 18. low_savings_commands reports the same weighted rate as the `rtk gain` By Command
+    // table, including net-regressing commands, and nothing for commands without input.
+    //
+    // `rtk ls -R`: one 95% call plus four 0% passthrough calls. Unweighted AVG(savings_pct)
+    // over those five rows is 19%, under the 30% threshold, so the command would reach
+    // telemetry as low-savings while `get_by_command` shows it at ~94.6% in the same
+    // `rtk gain` run. Weighted, 95_000 / 100_400 ≈ 94.6%: not listed.
+    // `rtk grep`: 25% on one call, then a call with no input that still printed 10 tokens.
+    // Every row counts, as in `get_by_command`: (250 - 10) / 1_000 = 24%, listed at 24.
+    // `rtk read`: emits more than it saves, -50%. Listed: it is the filter to fix first.
+    // `rtk proxy`: never had any input. Nothing to say about its filter, not listed.
+    #[test]
+    fn test_low_savings_commands_matches_gain_weighted_rate() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create tracker");
+        tracker
+            .record("ls -R big", "rtk ls -R", 100_000, 5_000, 10)
+            .expect("record big call");
+        for _ in 0..4 {
+            tracker
+                .record("ls -R empty", "rtk ls -R", 100, 100, 5)
+                .expect("record passthrough call");
+        }
+        tracker
+            .record("grep x", "rtk grep", 1_000, 750, 5)
+            .expect("record 25% call");
+        tracker
+            .record("grep none", "rtk grep", 0, 10, 5)
+            .expect("record no-input call");
+        tracker
+            .record("read big.json", "rtk read", 100, 150, 5)
+            .expect("record regressing call");
+        tracker
+            .record("interactive", "rtk proxy", 0, 0, 5)
+            .expect("record zero-input call");
+
+        let low = tracker
+            .low_savings_commands(10)
+            .expect("low_savings_commands");
+        let listed: Vec<(&str, f64)> = low.iter().map(|(n, r)| (n.as_str(), *r)).collect();
+        assert_eq!(
+            listed.len(),
+            2,
+            "expected `rtk grep` (24%) and `rtk read` (-50%); ~94.6% weighted must not be \
+             listed (unweighted AVG(savings_pct) would put it at 19%), got {listed:?}"
+        );
+        assert_eq!(listed[0].0, "rtk grep");
+        assert!((listed[0].1 - 24.0).abs() < 1e-9, "got {listed:?}");
+        assert_eq!(listed[1].0, "rtk read");
+        assert!((listed[1].1 - (-50.0)).abs() < 1e-9, "got {listed:?}");
+
+        // The figure sent to telemetry is the one `rtk gain` prints for the same command.
+        let summary = tracker.get_summary().expect("get_summary");
+        for (name, rate) in &low {
+            let (_, _, _, gain_rate, _) = summary
+                .by_command
+                .iter()
+                .find(|(command, _, _, _, _)| command == name)
+                .unwrap_or_else(|| panic!("{name} missing from by_command"));
+            assert!(
+                (gain_rate - rate).abs() < 1e-9,
+                "{name}: telemetry says {rate}, rtk gain says {gain_rate}"
+            );
+        }
+    }
+
+    // 19. avg_savings_per_command weights each command's own rate by volume (every call
+    // counted, as in test 18), then averages the per-command rates without weighting: each
+    // command name counts once, and a command that never had any input is not counted.
+    //
+    // Same rows as test 18: `rtk ls -R` ≈ 94.6% (19% if the inner aggregate were
+    // AVG(savings_pct)), `rtk grep` 24%, `rtk read` -50%, `rtk proxy` skipped.
+    #[test]
+    fn test_avg_savings_per_command_inner_rate_is_weighted() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create tracker");
+        tracker
+            .record("ls -R big", "rtk ls -R", 100_000, 5_000, 10)
+            .expect("record big call");
+        for _ in 0..4 {
+            tracker
+                .record("ls -R empty", "rtk ls -R", 100, 100, 5)
+                .expect("record passthrough call");
+        }
+        tracker
+            .record("grep x", "rtk grep", 1_000, 750, 5)
+            .expect("record 25% call");
+        tracker
+            .record("grep none", "rtk grep", 0, 10, 5)
+            .expect("record no-input call");
+        tracker
+            .record("read big.json", "rtk read", 100, 150, 5)
+            .expect("record regressing call");
+        tracker
+            .record("interactive", "rtk proxy", 0, 0, 5)
+            .expect("record zero-input call");
+
+        let avg = tracker
+            .avg_savings_per_command()
+            .expect("avg_savings_per_command");
+        let ls_rate = 95_000.0 * 100.0 / 100_400.0;
+        let expected = (ls_rate + 24.0 - 50.0) / 3.0;
+        assert!(
+            (avg - expected).abs() < 1e-6,
+            "expected ({ls_rate:.1} + 24 - 50) / 3 = {expected:.1}%, got {avg:.1}% \
+             (an unweighted inner AVG(savings_pct) would give (19 + 12.5 - 50) / 3 = -6.2%)"
+        );
     }
 }
