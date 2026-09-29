@@ -66,10 +66,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-09-28 |
+| Last audit | 2026-09-29 |
 | Status | PASSED |
-| Summary | Merged 84 upstream commits (develop -> master); 0 real vulnerabilities — Semgrep/Trivy/TruffleHog/OSV-Scanner all clean, 38 gitleaks hits + 2 config-audit hits triaged as false-positive test fixtures and policy text |
-| Report | [Security reports/security-audit-2026-09-28.md](Security%20reports/security-audit-2026-09-28.md) |
+| Summary | Merged 3 upstream commits; 0 real vulnerabilities — Semgrep/Trivy/TruffleHog/OSV-Scanner/Bandit all clean, 38 gitleaks hits + 2 skill-audit CRITICAL scores triaged as false-positive test fixtures and doc text |
+| Report | [Security reports/security-audit-2026-09-29.md](Security%20reports/security-audit-2026-09-29.md) |
 
 ## How Savings Work
 
