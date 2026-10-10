@@ -26,7 +26,31 @@ None.
 | 2 | `tests/guard_integration_test.rs:166,184` | Gitleaks | `stripe-access-token` | **False positive.** Test fixture for rtk's secret-guard filter (`sk_live_…` synthetic). |
 | 3 | `src/cmds/cloud/aws_cmd.rs:1878,1879,1923,2035` | Gitleaks | `generic-api-key` | **False positive.** Synthetic AWS CloudWatch pagination tokens in `#[cfg(test)]` fixtures. |
 | 4 | `scripts/benchmark/cloud-init.yaml:282,613` | Gitleaks | `generic-api-key` | **False positive.** Placeholder key in benchmark fixture. |
-| 5 | Global `~/.claude` plugins/skills (outside the target path) | config-audit | 20 CRITICAL / 20 HIGH / 75 MEDIUM / 21 LOW heuristic matches in installed third-party skills and plugins (e.g. `base64`+`.env`, `eval()` in benchmark scripts) | **Not in scope.** config-audit scans the user's global Claude config, not this repo. Heuristic pattern matches, not verified exploits. Not modified; review the listed plugins manually if desired. |
+| 5 | Global `~/.claude` plugins/skills (outside the target path) | config-audit | 20 CRITICAL / 20 HIGH / 75 MEDIUM / 21 LOW heuristic matches | **All 40 CRITICAL/HIGH manually triaged as false positives.** Breakdown in the next table. No files modified. |
+
+### config-audit CRITICAL/HIGH triage (follow-up, 2026-10-10)
+
+Root cause of most CRITICAL hits: `config-audit.py` line 33 uses `\.env\b` for ".env file access", which also matches the JavaScript `process.env.X`. Paired with any `base64`, `curl` or `eval` pattern in the same file, this becomes a "Data exfiltration" CRITICAL. The scanner has no allowlist. Patching it locally would break its SHA256SUMS integrity check, and edits to the plugin cache are overwritten on update.
+
+| Finding (count) | What the code actually does | Verdict |
+|---|---|---|
+| `settings.json` hooks — "curl to external URL" (7 HIGH) | cc-beeper hooks POST to `http://localhost:${PORT}/hook` with a local token from `~/.claude/cc-beeper/` | False positive — localhost only, nothing leaves the machine |
+| caveman `install.sh` / `uninstall.sh` / `caveman-init.js` (3 CRITICAL) | `.env` match is `process.env.CAVEMAN_*`; curl pulls hook files from the plugin's own GitHub repo (`raw.githubusercontent.com/JuliusBrussee/caveman`) | False positive |
+| caveman `binary-installer*.mjs`, `native-hook-fast.ts`, `sign-binary-checksums.mjs` (6 CRITICAL) | base64 used for checksum/binary handling; `.env` match is `process.env` | False positive |
+| anysearch `anysearch_cli.sh` (1 CRITICAL) | Reads its own API key from the skill-local `.env` and POSTs queries to `https://api.anysearch.com/mcp` | Expected behaviour for an API client |
+| impeccable `generate-image.mjs` 4.1.1 + 4.1.2 (2 CRITICAL) | Sends `OPENAI_API_KEY` to `api.openai.com/v1/images/edits`; base64 decodes the returned image | Expected behaviour |
+| impeccable `font-match.mjs`, `detect-url.mjs` (2 CRITICAL) | `process.env.TMPDIR` / `process.env.CI`; base64 for fonts/screenshots | False positive |
+| ponytail `benchmarks/correctness.js`, `robustness-audit.js`, `agentic/tasks.py` (3 CRITICAL) | Benchmark harness: `eval(name)` looks up a function name in generated test code; `process.env.PORT` in task fixtures. Not referenced by any ponytail hook | False positive — dev-only benchmark code |
+| security-scanner's own `config-audit.py`, `skill-audit.sh`, `mcp-exfil-scan.sh` (3 CRITICAL) | Detection patterns (`ncat`, `base64`, `.ssh/`) listed as strings in the scanner itself | False positive — scanner matching its own rules |
+| `bash-guard-pretooluse.sh` (3 HIGH), plugin-dev `validate-bash.sh` ×3 versions (6 HIGH) | `rm -rf /`, `mkfs`, `dd`, `chmod 777` appear as **deny-list** patterns that the guard blocks | False positive — defensive code |
+| `qa/SKILL.md` (1 HIGH) | Instructions: `curl -LsSf https://astral.sh/uv/install.sh \| sh` only if `uv` missing; `curl` to check a target URL is reachable | Benign; standard uv installer |
+| `optimize/SKILL.md` (1 HIGH) | No `nc`/`netcat` invocation found on manual grep; substring match | False positive |
+| rtk `CLAUDE.md` (2 HIGH, same file via case-insensitive path) | Documentation example `rtk proxy curl https://api.example.com/data` | False positive |
+
+Follow-up actions taken (2026-10-10, owner-approved):
+- Pruned plugin cache versions not referenced by `installed_plugins.json`: impeccable 4.1.1 and 4.1.2, plugin-dev `b819188d2eea` and `d182ca456ca0`. Moved to `~/.Trash/claude-plugin-cache-2026-10-10/`, not deleted, so they can be restored. In-use versions kept: impeccable 4.5.0, plugin-dev `315c4e48967d`.
+- config-audit re-run after pruning: CRITICAL 20 → 16, HIGH 20 → 16, MEDIUM 75 → 73, LOW 21 → 19. Every remaining CRITICAL/HIGH is one of the false-positive classes in the table above.
+- An upstream issue for the `process.env` false positive was drafted for claude-code-security-plugins; not filed.
 
 TruffleHog (`--only-verified`, git history): **0 verified secrets**, which corroborates that the Gitleaks hits are not live credentials.
 
