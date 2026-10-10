@@ -66,11 +66,10 @@ RTK intercepts shell commands and compresses their output before your agent read
 ## Security Audit
 | | |
 |-|-|
-| Last audit | 2026-10-01 |
-| Status | PASSED |
-| Summary | Merged 16 upstream commits; 0 real vulnerabilities — Semgrep/Trivy/TruffleHog/OSV-Scanner all clean, 38 gitleaks hits triaged as false-positive test fixtures and prior report text |
-| Report | [Security reports/security-audit-2026-10-01.md](Security%20reports/security-audit-2026-10-01.md) |
-
+| Last audit | 2026-10-10 |
+| Status | ISSUES FIXED |
+| Summary | Merged 121 upstream commits; fixed 4 advisories in 3 crates (quick-xml, crossbeam-epoch, rustls); 0 unresolved; 38 gitleaks hits triaged as false positives |
+| Report | [Security reports/security-audit-2026-10-10.md](Security%20reports/security-audit-2026-10-10.md) |
 ## How Savings Work
 
 RTK cuts **up to 90% of the bash output** your agent reads. That is what RTK measures, and it is not the same as cutting your bill by 90%.
@@ -406,7 +405,7 @@ The most effective way to use rtk. The hook transparently intercepts Bash comman
 
 ```bash
 rtk init -g                 # Install hook + RTK.md (recommended)
-rtk init -g --opencode      # OpenCode plugin (instead of Claude Code)
+rtk init -g --opencode      # Claude setup + OpenCode plugin
 rtk init -g --auto-patch    # Non-interactive (CI/CD)
 rtk init -g --hook-only     # Hook only, no RTK.md
 rtk init --show             # Verify installation
@@ -431,7 +430,7 @@ Prefer [`winget`](#winget-windows) if you can — it handles PATH for you.
 rtk init -g
 ```
 
-**Upgrading from an older install?** If you set RTK up before v0.37.2 you may still have the legacy `rtk-rewrite.sh` shell hook (which does need a Unix shell). Re-run `rtk init -g` to migrate to the native binary hook.
+**Upgrading from an older install?** Before v0.37.2, `rtk init -g` on native Windows fell back to CLAUDE.md injection and registered no hook. Re-run `rtk init -g` and answer `y` when it asks to patch `settings.json` (or pass `--auto-patch`) to install the native binary hook.
 
 **Prerequisites**: some filters shell out to [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`). Install it and keep it on your PATH (e.g. `winget install BurntSushi.ripgrep.MSVC`) to avoid `Binary 'rg' not found on PATH` warnings.
 
