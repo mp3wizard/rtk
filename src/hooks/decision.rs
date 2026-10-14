@@ -18,6 +18,7 @@
 //! [`ApprovalOwner`], which only ever relaxes the *default* ask.
 
 use super::permissions::{Host, PermissionVerdict, check_command_for};
+use crate::core::user_env;
 use crate::discover::registry::rewrite_command;
 
 /// What a hook should do with a command.
@@ -90,12 +91,12 @@ impl ApprovalOwner {
     /// typo must never borrow another host's rules or drop a gate, which is
     /// what an unknown-value fallback to a *named* host would do.
     pub(crate) fn from_env() -> Self {
-        match std::env::var(REWRITE_HOST_ENV) {
-            Ok(name) => match AgentPath::lookup(&name) {
+        match user_env::var(REWRITE_HOST_ENV) {
+            Some(name) => match AgentPath::lookup(&name) {
                 Some(AgentPath::ViaRewrite(owner)) => owner,
                 _ => Self::Rtk,
             },
-            Err(_) => Self::Rtk,
+            None => Self::Rtk,
         }
     }
 
@@ -121,7 +122,8 @@ impl ApprovalOwner {
 /// The gate order is load-bearing:
 ///
 /// 1. **Deny wins outright.** Checked before anything else so a denied command
-///    is never even considered for rewriting.
+///    is never even considered for rewriting. A deny rule matched inside a
+///    shell wrapper's script yields `Defer` instead: no rewrite, no decision.
 /// 2. **Unattestable constructs are refused.** Command substitution and
 ///    file-target redirects can't be decomposed into segments the permission
 ///    gate can check individually, so a rewrite could smuggle an unchecked
@@ -145,15 +147,13 @@ pub(crate) fn decide(cmd: &str, verdict: PermissionVerdict) -> HookDecision {
 }
 
 /// [`decide`] with the rewrite parameters supplied by the caller, mirroring
-/// [`check_command_with_rules`](super::permissions::check_command_with_rules).
+/// [`check_command_with_rules_and_prefixes`](super::permissions::check_command_with_rules_and_prefixes).
 ///
-/// `hook_rewrite_params` reads the user's `config.toml`, so a test calling
-/// [`decide`] changes answer with the developer's own `exclude_commands` and
-/// `transparent_prefixes` — an `exclude_commands = ["git"]` on the machine
-/// turns an expected rewrite into a defer, and the test fails there and only
-/// there. Taking the parameters keeps the decision under test independent of
-/// the host configuration, the same way the verdict is passed in rather than
-/// looked up (#3146).
+/// `hook_rewrite_params` reads `config.toml`, which in a test build is the
+/// calling test's own. Taking the parameters lets a test state the
+/// `exclude_commands` and `transparent_prefixes` it means instead of writing a
+/// file for them, the same way the verdict is passed in rather than looked up
+/// (#3146).
 pub(crate) fn decide_with_params(
     cmd: &str,
     verdict: PermissionVerdict,
@@ -162,6 +162,10 @@ pub(crate) fn decide_with_params(
 ) -> HookDecision {
     if verdict == PermissionVerdict::Deny {
         return HookDecision::Deny;
+    }
+
+    if verdict == PermissionVerdict::Defer {
+        return HookDecision::Defer;
     }
 
     if crate::discover::lexer::contains_unattestable_construct(cmd) {
@@ -194,9 +198,10 @@ pub(crate) fn decide_for_agent(cmd: &str, verdict: PermissionVerdict) -> HookDec
 /// so it refuses the command and tells the user to re-run the very thing they
 /// ran; Cursor raises a permission prompt for it. The plugins that shell out to
 /// `rtk rewrite` reach the same outcome in their own code --
-/// `hooks/opencode/rtk.ts`, `hooks/pi/rtk.ts` (shared with omp),
-/// `hooks/hermes/rtk-rewrite/__init__.py` and `openclaw/index.ts` all gate on
-/// `rewritten != command`.
+/// `hooks/pi/rtk.ts` (shared with omp), `hooks/hermes/rtk-rewrite/__init__.py`
+/// and `openclaw/index.ts` all gate on `rewritten != command`.
+/// `hooks/opencode/rtk.ts` shells out to `rtk hook opencode` instead, which
+/// goes through here in-process and answers `{}` for the no-op.
 ///
 /// `Defer` is not uniformly neutral, though: Gemini renders it as `ask_user`,
 /// so there suppression trades a no-op rewrite for a confirmation prompt even
@@ -293,7 +298,8 @@ impl AgentPath {
             // settings (#3908). Its deny gate is unaffected -- see
             // `ApprovalOwner`.
             "openclaw" => Some(Self::ViaRewrite(ApprovalOwner::Delegate)),
-            "hermes" | "omp" | "opencode" | "pi" => Some(Self::ViaRewrite(ApprovalOwner::Rtk)),
+            "opencode" => Some(Self::InProcess(Host::OpenCode)),
+            "hermes" | "omp" | "pi" => Some(Self::ViaRewrite(ApprovalOwner::Rtk)),
             "vibe" => Some(Self::InProcess(Host::Vibe)),
             _ => None,
         }
@@ -389,6 +395,18 @@ mod tests {
             decide_with_params("htop", PermissionVerdict::Default, &[], &[]),
             HookDecision::Defer
         );
+    }
+
+    #[test]
+    fn defer_verdict_defers_a_rewritable_command() {
+        assert_eq!(
+            decide_with_params("env bash -c 'git push'", PermissionVerdict::Defer, &[], &[]),
+            HookDecision::Defer
+        );
+        assert!(matches!(
+            decide_with_params("env bash -c 'git push'", PermissionVerdict::Ask, &[], &[]),
+            HookDecision::AskRewrite(_)
+        ));
     }
 
     /// Refused whatever the verdict: the permission gate can't decompose these
@@ -496,6 +514,17 @@ mod tests {
             assert!(AgentPath::lookup(name).is_some(), "unmapped: {name}");
             assert!(AgentPath::AGENTS.contains(&name), "not listed: {name}");
         }
+    }
+
+    /// OpenCode decides in-process against its own rules. On `ViaRewrite` the
+    /// plugin and `rtk hook check --agent opencode` would silently drift back
+    /// to judging against Claude Code's settings (#4195).
+    #[test]
+    fn opencode_is_judged_in_process_against_its_own_host() {
+        assert!(matches!(
+            AgentPath::lookup("opencode"),
+            Some(AgentPath::InProcess(Host::OpenCode))
+        ));
     }
 
     /// Everything advertised in the error message must actually resolve.
@@ -653,7 +682,7 @@ mod tests {
     /// is one vocabulary; everything else is the stricter default.
     #[test]
     fn the_host_environment_variable_fails_closed() {
-        temp_env::with_var(REWRITE_HOST_ENV, Some("openclaw"), || {
+        user_env::with_vars(&[(REWRITE_HOST_ENV, Some("openclaw"))], || {
             assert_eq!(ApprovalOwner::from_env(), ApprovalOwner::Delegate);
         });
         for name in [
@@ -673,7 +702,7 @@ mod tests {
             "",
             "nope",
         ] {
-            temp_env::with_var(REWRITE_HOST_ENV, Some(name), || {
+            user_env::with_vars(&[(REWRITE_HOST_ENV, Some(name))], || {
                 assert_eq!(
                     ApprovalOwner::from_env(),
                     ApprovalOwner::Rtk,
@@ -681,7 +710,7 @@ mod tests {
                 );
             });
         }
-        temp_env::with_var_unset(REWRITE_HOST_ENV, || {
+        user_env::with_vars(&[(REWRITE_HOST_ENV, None)], || {
             assert_eq!(ApprovalOwner::from_env(), ApprovalOwner::Rtk);
         });
     }
