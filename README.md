@@ -72,7 +72,7 @@ RTK intercepts shell commands and compresses their output before your agent read
 |-|-|
 | Last audit | 2026-10-31 |
 | Status | ISSUES FIXED |
-| Summary | Merged 409 upstream commits; 4 dependency advisories fixed (rustls, rustls-webpki, webpki-roots, tokio); 3 unresolved (lru via ratatui 0.29, paste unmaintained, hermes hook PATH lookup); gitleaks hits triaged as false positives |
+| Summary | Merged 409 upstream commits; 6 dependency advisories fixed (rustls, rustls-webpki, webpki-roots, tokio, lru and paste via ratatui 0.30); 1 unresolved (hermes hook PATH lookup); gitleaks hits triaged as false positives |
 | Report | [Security reports/security-audit-2026-10-31.md](Security%20reports/security-audit-2026-10-31.md) |
 
 ## How Savings Work

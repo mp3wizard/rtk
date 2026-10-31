@@ -1,7 +1,7 @@
 # Security Audit — 2026-10-31
 
 ## Summary
-- Issues found: 7 (grouped advisories/findings) | Auto-fixed: 4 | Unresolved: 3
+- Issues found: 7 (grouped advisories/findings) | Auto-fixed: 6 | Unresolved: 1
 - Status: ISSUES FIXED
 
 Scope: full codebase after merging 409 upstream commits from `origin/develop`. Tools run: gitleaks, bandit, trivy, osv-scanner, trufflehog. Semgrep, skill/MCP audit scripts, and skillspector were not run in this pass (see Coverage).
@@ -13,18 +13,18 @@ Scope: full codebase after merging 409 upstream commits from `origin/develop`. T
 | 2 | rustls-webpki (Cargo.lock) | RUSTSEC-2026-0382 | 0.103.15 → 0.103.16 |
 | 3 | webpki-roots (Cargo.lock, proxy/Cargo.lock) | RUSTSEC-2026-0381 | 1.0.6 → 1.0.10 (root); 1.0.9 → 1.0.10 (proxy) |
 | 4 | tokio (proxy/Cargo.lock) | RUSTSEC-2026-0386 | 1.53.1 → 1.53.3 |
+| 5 | lru (Cargo.lock) | RUSTSEC-2026-0002, RUSTSEC-2026-0253, GHSA-rhfx-m35p-ff5j | 0.12.5 → 0.18.5 by upgrading `ratatui` 0.29 → 0.30.2 (follow-up commit). No source change needed. |
+| 6 | paste (Cargo.lock) | RUSTSEC-2024-0436 | Dropped from the graph by the same ratatui upgrade. osv-scanner on Cargo.lock: no issues found. |
 
 ## Unresolved Issues
 | # | Component | Advisory | Reason |
 |---|-----------|----------|--------|
-| U1 | lru 0.12.5 (Cargo.lock) | RUSTSEC-2026-0002, RUSTSEC-2026-0253, GHSA-rhfx-m35p-ff5j (LOW) | Pulled by `ratatui 0.29.0`, which pins `lru ^0.12`. Fixed versions (0.16.3 / 0.18.2) need a `ratatui` upgrade (0.30.x available), a major-API change. Not auto-applied. |
-| U2 | paste 1.0.15 | RUSTSEC-2024-0436 (unmaintained) | No fixed version exists. Informational. |
-| U3 | hooks/hermes/rtk-rewrite/__init__.py:51-53 | Bandit B603/B607 (High, high-confidence) | `subprocess.run(["rtk", "rewrite", ...], shell=False)`. Args are a list, so no shell injection. The bare `rtk` name resolves through PATH. Pinning an absolute path is a design change to the hook, so not auto-applied. |
+| U1 | hooks/hermes/rtk-rewrite/__init__.py:51-53 | Bandit B603/B607 (High, high-confidence) | `subprocess.run(["rtk", "rewrite", ...], shell=False)`. Args are a list, so no shell injection. The bare `rtk` name resolves through PATH. Pinning an absolute path is a design change to the hook, so not auto-applied. |
 
 ## Triage — no code change
 - **gitleaks (39 hits):** `generic-api-key` / `stripe-access-token` in `src/cmds/cloud/aws_cmd.rs`, `tests/guard_integration_test.rs`, `proxy/tests/functional.rs`, `scripts/benchmark/cloud-init.yaml`, `SECURITY.md`, and prior `Security reports/*.md` (which quote earlier scanner output). Classed as false positives (test fixtures and quoted report text). Not suppressed in config.
 - **trufflehog:** 0 verified secrets, 3 unverified (JDBC `jdbc:oracle:thin:@localhost:1523:XE` in `src/filters/liquibase.toml` and a report file). Local dev connection string, not a credential.
-- **bandit:** 6 High findings, all B404/B603/B607 in `hooks/hermes/` (see U3). Tests covered by the same file.
+- **bandit:** 6 High findings, all B404/B603/B607 in `hooks/hermes/` (see U1). Tests covered by the same file.
 
 ## Raw Scanner Output
 Full unedited logs are in the session scratchpad, not inlined here:
