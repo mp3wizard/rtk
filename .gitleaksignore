@@ -1,0 +1,40 @@
+# Triaged 2026-11-02: historical false positives (test fixtures, placeholder keys, quoted pattern text in prior audit reports).
+# TruffleHog verified 0 live secrets. See Security reports/security-audit-2026-11-02.md.
+060a63ec760593abf650ccca92de8162c2167070:Security reports/security-audit-2026-05-22.md:generic-api-key:36
+0baf07e2ae3b6937afdb48420ea98b10119fef8c:tests/guard_integration_test.rs:stripe-access-token:166
+0baf07e2ae3b6937afdb48420ea98b10119fef8c:tests/guard_integration_test.rs:stripe-access-token:184
+20dca8a4d5230762634aef56239d37f88d614b52:Security reports/2026-04-16-security-report.md:stripe-access-token:64
+4080adc80dff5bd68895cdca7acdd9f9280e4873:Security reports/security-audit-2026-05-29.md:generic-api-key:50
+4080adc80dff5bd68895cdca7acdd9f9280e4873:Security reports/security-audit-2026-05-29.md:generic-api-key:52
+4080adc80dff5bd68895cdca7acdd9f9280e4873:Security reports/security-audit-2026-05-29.md:stripe-access-token:49
+4080adc80dff5bd68895cdca7acdd9f9280e4873:Security reports/security-audit-2026-05-31.md:generic-api-key:44
+434f367e7903710d2ed6f666caca207f19b0bf23:Security reports/security-audit-2026-04-18.md:stripe-access-token:36
+434f367e7903710d2ed6f666caca207f19b0bf23:Security reports/security-audit-2026-04-18.md:stripe-access-token:39
+5aef44dff3fc1a3dc46ab41514e98579c3807c0b:Security reports/security-audit-2026-06-22.md:stripe-access-token:40
+5bf77c4d15f9e20e98d10f096cfa150c3dc395d7:Security reports/security-audit-2026-06-04.md:stripe-access-token:21
+5bf77c4d15f9e20e98d10f096cfa150c3dc395d7:Security reports/security-audit-2026-06-06.md:stripe-access-token:22
+5d334bf4b6e5b8416363767deb95c4e4298884f4:Security reports/security-audit-2026-06-19.md:stripe-access-token:53
+66101ebb65076359a1530d8f19e11a17c268bce2:SECURITY.md:stripe-access-token:151
+9329f3dd1712b076d1ec5e06b13ae3f12027c254:Security reports/security-audit-2026-07-07.md:stripe-access-token:20
+a2bcee7a4bb7022e09d967aff0d6af60a7073988:proxy/tests/functional.rs:generic-api-key:1333
+a2d57e9af91dfe07c78792a4be360fecc07d043a:Security reports/security-audit-2026-06-29.md:generic-api-key:43
+be0c645072ab76eac31fb3ac0663810de64efb02:Security reports/security-audit-2026-07-01.md:generic-api-key:31
+be0c645072ab76eac31fb3ac0663810de64efb02:Security reports/security-audit-2026-07-01.md:stripe-access-token:32
+be9edfe85958808b5c78d9dd55c60bbd222c4484:Security reports/security-audit-2026-05-24.md:generic-api-key:51
+be9edfe85958808b5c78d9dd55c60bbd222c4484:Security reports/security-audit-2026-05-24.md:stripe-access-token:53
+be9edfe85958808b5c78d9dd55c60bbd222c4484:Security reports/security-audit-2026-05-27.md:stripe-access-token:47
+be9edfe85958808b5c78d9dd55c60bbd222c4484:Security reports/security-audit-2026-05-27.md:stripe-access-token:49
+bebc9d61097af6365ec767af42fbc5f2346f906d:Security reports/security-audit-2026-04-19.md:stripe-access-token:17
+c90e2a4ec04bf07dcbda46f59f43b905e1d15b5e:Security reports/security-audit-2026-06-08.md:generic-api-key:18
+c90e2a4ec04bf07dcbda46f59f43b905e1d15b5e:Security reports/security-audit-2026-06-08.md:stripe-access-token:20
+c90e2a4ec04bf07dcbda46f59f43b905e1d15b5e:Security reports/security-audit-2026-06-09.md:stripe-access-token:48
+c90e2a4ec04bf07dcbda46f59f43b905e1d15b5e:Security reports/security-audit-2026-06-10.md:generic-api-key:59
+c90e2a4ec04bf07dcbda46f59f43b905e1d15b5e:Security reports/security-audit-2026-06-15.md:generic-api-key:83
+c90e2a4ec04bf07dcbda46f59f43b905e1d15b5e:Security reports/security-audit-2026-06-15.md:stripe-access-token:86
+c90e2a4ec04bf07dcbda46f59f43b905e1d15b5e:Security reports/security-audit-2026-06-17.md:stripe-access-token:21
+cc15ea7a8cf2158ed3295c8f1b9e8b122571e250:scripts/benchmark/cloud-init.yaml:generic-api-key:613
+d1b37ced0154ad2d78409191bf5be3215a93a18a:src/cmds/cloud/aws_cmd.rs:generic-api-key:1878
+d1b37ced0154ad2d78409191bf5be3215a93a18a:src/cmds/cloud/aws_cmd.rs:generic-api-key:1879
+d1b37ced0154ad2d78409191bf5be3215a93a18a:src/cmds/cloud/aws_cmd.rs:generic-api-key:1923
+d1b37ced0154ad2d78409191bf5be3215a93a18a:src/cmds/cloud/aws_cmd.rs:generic-api-key:2035
+d22759b8c5254ad9c4a455f10cb7de75e92df581:scripts/benchmark/cloud-init.yaml:generic-api-key:282

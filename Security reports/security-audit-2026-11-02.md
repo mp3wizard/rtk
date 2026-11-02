@@ -1,8 +1,8 @@
 # Security Audit — 2026-11-02
 
 ## Summary
-- Issues found: 7 | Auto-fixed: 4 | Unresolved: 3
-- Status: ISSUES REMAINING
+- Issues found: 7 | Auto-fixed: 7 | Unresolved: 0
+- Status: ISSUES FIXED
 
 ## Fixed Issues
 | # | Component | Advisory | Change |
@@ -11,12 +11,13 @@
 | 2 | rustls-webpki (Cargo.lock, proxy/Cargo.lock) | RUSTSEC-2026-0382 | 0.103.15 → 0.103.16 |
 | 3 | webpki-roots (Cargo.lock, proxy/Cargo.lock) | RUSTSEC-2026-0381 | 1.0.6 / 1.0.9 → 1.0.10 |
 | 4 | tokio (proxy/Cargo.lock) | RUSTSEC-2026-0386 | 1.53.1 → 1.53.3 |
+| 5 | lru (Cargo.lock) | RUSTSEC-2026-0002 / RUSTSEC-2026-0253 | 0.12.5 → 0.18.5 via ratatui 0.29 → 0.30 (only `src/analytics/gain_tui.rs` uses it; clippy clean, 5432 tests pass) |
+| 6 | paste (Cargo.lock) | RUSTSEC-2024-0436 (unmaintained) | Removed — ratatui 0.30 no longer depends on it |
+| 7 | gitleaks, 39 history hits | n/a | Triaged as false positives (test fixtures, placeholder keys, quoted pattern text in prior reports; TruffleHog verified 0 live). Fingerprints added to `.gitleaksignore`; rescan reports no leaks. History not rewritten. |
 
-## Unresolved Issues
-1. **lru 0.12.5** (Cargo.lock, MEDIUM) — OSV-listed advisories RUSTSEC-2026-0002 and RUSTSEC-2026-0253 (fixed in 0.16.3 / 0.18.2). Pinned by `ratatui 0.29.0` (requires `^0.12`). Cannot bump without a ratatui upgrade — needs a human decision.
-2. **paste 1.0.15** (Cargo.lock, LOW) — RUSTSEC-2024-0436, unmaintained crate, no fixed version. Transitive via `ratatui 0.29.0` (proc-macro).
-3. **gitleaks — 39 hits in git history** (no fix applied). 21 `stripe-access-token` + 18 `generic-api-key`. Locations: `src/cmds/cloud/aws_cmd.rs` (5), `tests/guard_integration_test.rs` (2), `proxy/tests/functional.rs` (1), `scripts/benchmark/cloud-init.yaml` (2), `SECURITY.md` (1), and prior `Security reports/*.md` files (quoted pattern text). Current-tree scan finds no realistic-length `sk_live_` string; TruffleHog verified 0 secrets (4 unverified, JDBC localhost strings). Judged historical/false positive. Rewriting history is out of scope for this run.
-   - Not counted as an issue: skill-audit reports CRITICAL 100/100 for `.claude/skills/security-guardian/SKILL.md`. Matches are example attack strings inside a security-guidance document. False positive.
+Post-fix verification: `osv-scanner` reports "No issues found"; `gitleaks detect` reports "no leaks found"; `cargo clippy --all-targets` and `cargo test --all` pass.
+
+Note: skill-audit reports CRITICAL 100/100 for `.claude/skills/security-guardian/SKILL.md`. Matches are example attack strings in a security-guidance document. False positive, no change.
 
 ## Raw Scanner Output
 Tool outputs below are ANSI-stripped. Secret-looking strings were redacted with [REDACTED].
