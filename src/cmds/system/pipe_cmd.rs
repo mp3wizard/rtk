@@ -49,7 +49,7 @@ fn git_status_wrapper(input: &str) -> String {
 }
 
 fn git_log_wrapper(input: &str) -> String {
-    crate::cmds::git::git_cmd::filter_log_output(input, 50, false, false)
+    crate::cmds::git::git_cmd::filter_log_output(input, 50, false)
 }
 
 fn git_diff_wrapper(input: &str) -> String {
@@ -310,6 +310,16 @@ mod tests {
         let f = auto_detect_filter(input);
         let out = f(input);
         assert_eq!(out, input, "should pass through unchanged, got: {}", out);
+    }
+
+    #[test]
+    fn test_pipe_pytest_strips_ansi_before_parsing() {
+        // A colored pytest summary must not be reported as "No tests collected".
+        let input = "\u{1b}[32m===== \u{1b}[32m\u{1b}[1m12 passed\u{1b}[0m\u{1b}[32m in 21.90s\u{1b}[0m\u{1b}[32m =====\u{1b}[0m\n";
+        let f = resolve_filter("pytest").expect("pytest filter must exist");
+        let out = f(input);
+        assert!(out.contains("12 passed"), "out={}", out);
+        assert!(!out.contains("No tests collected"), "out={}", out);
     }
 
     #[test]
